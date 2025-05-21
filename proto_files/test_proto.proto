@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package test;
+
+message test_msg
+{
+  string name      = 1;
+  string ip        = 2;
+  string msg       = 3;
+}
