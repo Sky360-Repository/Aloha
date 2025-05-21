@@ -1,0 +1,31 @@
+syntax = "proto2";
+
+package pb.sky;
+
+message camera_image {
+    message time {
+        optional uint32 u_sec   = 1;  // Seconds (stamp_secs) since epoch (in Python the variable is
+                                      // called 'secs')
+        optional uint32 u_nano_sec  = 2;  // Nanoseconds since stamp_secs (in Python the variable is
+                                      // called 'nsecs')
+    }
+
+    // COMMON FIELDS
+    optional time               time_stamp    = 1;  // Two integer time stamp
+    optional uint32             width         = 2 [default = 0]; // Width of image (mandatory for raw format)
+    optional uint32             height        = 3 [default = 0]; // Height of image (mandatory for raw format)
+
+    // RAW FORMAT FIELDS
+    optional uint32             bit_per_pixel = 4 [default = 0]; // Mandatory for raw format
+    optional bytes              raw_image     = 5;               // Raw (not encoded) image frame
+
+    // JPEG FORMAT FIELDS
+    optional bytes              jpeg_data     = 6;               // JPEG encoded image frame
+    optional uint32             jpeg_size     = 7 [default = 0]; // Size of 'jpeg_data'
+
+    // h264 FORMAT FIELDS
+    optional bytes              h264_image    = 8;               // H264 encoded image frame
+
+    // camera identifier FIELD
+    optional uint32             sensor_id     = 9 [default = 0]; // Camera sensor id
+}
