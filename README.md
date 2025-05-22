@@ -1,7 +1,7 @@
 # Python scripts
 This is a collection of python scripts for eCAL and camera utilities.
 
-### Setup steps for eCAL:
+### Setup steps for eCAL under Windows:
   * Get Anaconda or miniconda: https://www.anaconda.com/products/individual#windows
   * Create Environment (do this once):
       ```shell
