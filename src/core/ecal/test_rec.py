@@ -1,6 +1,6 @@
 # \copyright    Sky360.org
 #
-# \brief        Captures video from a webcam and  broadcasts over eCAL.
+# \brief        eCAL receiver.
 #
 # ************************************************************************
 
