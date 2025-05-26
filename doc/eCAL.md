@@ -1,63 +1,85 @@
-# Python scripts
-This is a collection of python scripts for eCAL and camera utilities.
+# eCAL Apps
 
-### Setup steps for eCAL under Windows:
-  * Get Anaconda or miniconda: https://www.anaconda.com/products/individual#windows
-  * Create Environment (do this once):
-      ```shell
-        conda create -n eCAL_SKY360 python=3.11.7
-      ```
-  * Activate Environment (do this when opening new terminal):
-      ```shell
-        conda activate eCAL_SKY360
-      ```
+The .whl is a python binding to eCAL installation, so we need to install eCAL:
 
-  * This setup is assuming that the release 5.12 of eCAL is installed: https://eclipse-ecal.github.io/ecal/releases/
-  * Download the .whl file (eCAL dependencies) that matches both eCAL and python installation.
-  * For example, "ecal5-5.12.1-cp311-cp311-win_amd64.whl" for eCAL 5.12.1 and python 3.11.
-  * To install the .whl file, copy it in this folder and run (do this once):
-      ```shell
-        pip install ecal5-****-win_amd64.whl
-      ```
+```
+sudo add-apt-repository ppa:ecal/ecal-latest
+sudo apt-get update
+sudo apt-get install ecal
+sudo apt install -y protobuf-compiler
+```
 
-  * Install the rest of the dependencies (do this once):
-      ```shell
-        pip install -r requirements.txt
-      ```
+This installs the app but also the environment for c++
 
-  * Clone the repo and create proto bindings (do this once):
-      ```shell
-        sh proto_files/create_proto_bindings.sh
-      ```
+You should have a set of new apps installed: eCAL Monitor, eCAL Player, eCAL Recorder, eCAL Launcher and eCAL Sys.
 
-  NB: Although the creation of the proto bindings is needed only once, keep in mind that the command needs to be run every time a change occurs in the PROTO files or when checking out a branch that has a new PROTO definition.
+The next step is to install the .whl that was compiled for the latest ecal version 5.13.3 and python 3.12
 
-  Standalone functions to test the setup can be found in ECAL_functions: [ECAL_functions readme](ECAL_functions/README.md)
+Use miniconda to make sure I have the correct python version
 
-### Workflow:
+```
+conda create -n sky360 python=3.12
+conda activate sky360
+pip install src/contrib/ecal_whl/ecal5-5.13.3-cp312-cp312-linux_aarch64.whl
+```
 
-  * Normal Workflow to record from webcam
-  * camera_id is the ID used to select the camera using opencv
-      ```shell
-        start /b python webcam2ecal.py --camera_id 1 --channel_name camera_1
-      ```
-      ```shell
-        start /b python ecal_recorder.py --channel_name camera_1
-      ```
+# ecal5-5.13.3-cp312-cp312-linux_aarch64.whl
 
-  * Press [Esc] on the capture window to disconnect the camera. The recording stops if it has no signal.
+If the .whl is missing or you have a dufferent setup, you need to compile the code and build the .whl binding.
 
-  * Play and view the recording
-      ```shell
-        start /b python view_ecal_video.py --channel_name camera_1
-      ```
-      ```shell
-        python ecal_player.py
-      ```
+## Ecal dependencies - may be optional
+This is a list of dependencies that were needed during the process.
 
-  * For more info on the arguments
-      ```shell
-        python ecal_player.py -h
-      ```
+Ecal dependencies:
+```
+sudo apt-get install -y git cmake doxygen graphviz build-essential zlib1g-dev qtbase5-dev libhdf5-dev libprotobuf-dev libprotoc-dev protobuf-compiler libcurl4-openssl-dev libqwt-qt5-dev libyaml-cpp-dev
+sudo apt install -y cmake build-essential python3-dev python3-pip
+sudo apt install -y qtbase5-dev
+sudo apt install -y libhdf5-dev
+sudo apt install -y libyaml-cpp-dev
+sudo apt install -y libqwt-qt5-dev
+sudo apt install -y libprotobuf-dev protobuf-compiler
+sudo apt install -y doxygen
+sudo apt install -y patchelf
 
-  * ecal_player and ecal_recorder can work with any type of data by setting the correct arguments.
+sudo apt-get -y install python3.10-dev python3-pip
+sudo apt install python3-dev python3-pip python3-setuptools
+pip install --upgrade setuptools wheel build
+
+python3 -m pip install setuptools
+
+sudo apt update
+```
+
+# py hello eCAL
+From here you should be able to run the python examples in
+
+There's an hello world in
+```
+Aloha/src/ecal
+```
+
+Basic test:
+
+- Open a terminal and run
+```
+conda activate sky360
+python test_rec.py
+```
+- Open a second terminal and run
+```
+conda activate sky360
+python test_snd.py
+```
+
+# Working with cameras in eCAL
+
+```
+python webcam2ecal.py --camera_id 0 --channel_name camera_1 &
+python view_ecal_video.py --channel_name camera_1 &
+```
+
+- camera_id 0 is the camera number used in opencv and this function needs a webcamera.
+- channel_name camera_1 is the topic name. eCAL calls it channels and ROS calls it topics, but is the same concept.
+
+Use eCAL Monitor to see the communication in the channel.

@@ -1,5 +1,11 @@
 #!/bin/bash
 
+<<<<<<< HEAD
+cd ../proto_files
+=======
+echo $(dirname "$0")
 # Change directory to the proto files location first
 cd "./../src/ecal/proto_files"
+ls
+>>>>>>> 2719a7e (Updating structure and md)
 protoc -I=. --python_out=. *.proto

@@ -3,7 +3,7 @@
 # Sky360
 Observational Citizen Science of Earths atmosphere and beyond.
 
-[Sky360.org](https://www.sky360.org/) aims to contribute to the research and understanding of UAP by providing a robotic system capable of autonomously observing the skies and capturing scientific relevant data. 
+[Sky360.org](https://www.sky360.org/) aims to contribute to the research and understanding of UAP by providing a robotic system capable of autonomously observing the skies and capturing relevant scientific data.
 
 ## Contributing to Sky360.org
 Please visits our website [Sky360.org](https://www.sky360.org/)

@@ -1,6 +1,6 @@
 # \copyright    Sky360.org
 #
-# \brief        Script to listen to any UDP communication. 
+# \brief        Script to listen to any UDP communication.
 #
 # ********************************************************
 
