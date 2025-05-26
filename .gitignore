@@ -1,0 +1,54 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+*.manifest
+*.spec
+
+# === Virtual Environments ===
+.env/
+.venv/
+env/
+venv/
+
+# === IDEs and Editors ===
+.vscode/
+.idea/
+*.swp
+*~
+
+# === Bytecode cache ===
+.pytest_cache/
+.cache/
+
+# === CMake and C++ Build ===
+build/
+bin/
+Bin/
+Build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.o
+*.obj
+*.dll
+*.so
+*.a
+*.lib
+*.exe
+*.out
+
+# === Logs and Debug ===
+*.log
+*.trace
+*.tmp
+
+# === OS-Specific ===
+.DS_Store
+Thumbs.db
