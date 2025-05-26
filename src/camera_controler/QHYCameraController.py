@@ -9,6 +9,8 @@ import ctypes
 from ctypes import *
 from multiprocessing import shared_memory
 
+debug = True
+
 # Time formatting -------------------------------------------
 def format_timestamp_utc(ts: float) -> str:
     #Format a UNIX timestamp to a UTC time string with milliseconds
@@ -20,24 +22,21 @@ class RingBuffer:
         self.frame_bytes = roi_width * roi_height  # Number of pixels per frame
         self.frame_index = 0  # Start index for buffer cycling
 
-        # Shared memory for image frames
+        # Create shared memory block for image data
         self.shm = shared_memory.SharedMemory(create=True, size=self.buffer_size * self.frame_bytes * 2, name="cam_ring_buffer")
         self.frame_buffer = np.ndarray((self.buffer_size, roi_height, roi_width), dtype=np.uint16, buffer=self.shm.buf)
 
-        # Shared memory for timestamps
-        timestamp_bytes = self.buffer_size * np.dtype(np.float64).itemsize
-        self.shm2 = shared_memory.SharedMemory(create=True, size=timestamp_bytes, name="metadata_ring_buffer")
-        self.timestamp_buffer = np.ndarray((self.buffer_size,), dtype=np.float64, buffer=self.shm2.buf)
+        # Create shared memory block for metadata
+        metadata_bytes = np.prod((self.buffer_size, 3)) * np.dtype(np.float64).itemsize
+        self.shm2 = shared_memory.SharedMemory(create=True, size=metadata_bytes, name="metadata_ring_buffer")
+        self.metadata_buffer = np.ndarray((self.buffer_size, 3), dtype=np.float64, buffer=self.shm2.buf)        
+        
+        if debug: print(f"RingBuffer: successfully created ring buffers {self.frame_buffer.shape} and {self.metadata_buffer.shape} ✅")
 
     def store_frame(self, img: np.ndarray):
-        # Stores a frame in the ring buffer and updates timestamp.
+        # Stores a frame in the ring buffer and updates timestamp
         self.frame_buffer[self.frame_index] = img
-        self.timestamp_buffer[self.frame_index] = time.time()
-        self.frame_index = (self.frame_index + 1) % self.buffer_size  # Cycle index
-
-    def get_latest_frame(self):
-        # Retrieves the most recent frame from the buffer.
-        return self.frame_buffer[(self.frame_index - 1) % self.buffer_size]
+        self.metadata_buffer[self.frame_index] = time.time()
 
     def cleanup(self):
         # Releases shared memory resources.
@@ -48,117 +47,99 @@ class RingBuffer:
 
 # AE Controller
 class AEController:
-    # Constants
-    TARGET_GAIN = 22  # Initial gain
-    TARGET_DARK = 0.05  # [0..1]
-    TARGET_BRIGHT = 0.20  # [0..1]
-    EXPOSURE_MIN = 0  # [µs]
-    EXPOSURE_MAX = 140000  # [µs]
-    MIN_GAIN = 1.0
-    MAX_GAIN = 59.0
-    GAIN_ADJUSTMENT_SPEED = 0.02  # How fast gain is adjusted
-    SMOOTHED_ALPHA = 0.2  # [0..1]
-    HYSTERESIS = 0.015  # [0..1]
-    HYSTERESIS_BAND = 0.05  # Smooth scaling within ±5% error
-    MAX_EXP_STEP = 5000  # [µs]
-    MIN_EXP_STEP = 100  # [µs]
-    MAX_GAIN_STEP = 0.5
-    MIN_GAIN_STEP = 0.05
+    TARGET_GAIN = 22
+    EXPOSURE_MIN = 0
+    EXPOSURE_MAX = 140000
+    GAIN_MIN = 1.0
+    GAIN_MAX = 54.0
+    EXPOSURE_MIN_STEP = 100
+    GAIN_MIN_STEP = 0.5
+    TARGET_BRIGHTNESS = 0.5
+    COMPENSATION_FACTOR = 0.62 # [0..1] amout of brightness_error to be compensated - to prevent from overshooting
+    SMOOTHING_ALPHA = 0.3
 
     def __init__(self):
-        self.state = "adjust_exposure"
         self.smoothed_dark_ratio = None
         self.smoothed_bright_ratio = None
-        self.error_ratio = 0
-        self.brightness_error = 0.1
+        self.current_brightness = 0
+        self.brightness_error = 0
+        self.state = ""
 
-    def adaptive_step(self, error, max_step, min_step, scale_factor):
-        scale = min(1.0, abs(error) / self.HYSTERESIS_BAND)
-        return min(max_step, max(min_step, error * scale_factor * scale))
-
-    def aggressive_adaptive_step(self, error, max_step, min_step, scale_factor):
-        scale = min(1.0, abs(error) / self.HYSTERESIS_BAND)
-        return min(max_step, max(min_step, error * scale_factor * (scale ** 1.5)))
-
-    def ema_smoothing(self, frame_buffer, frame_index):
-        # Computes the histogram, CDF, and smooths brightness values.
-        gray_img = (frame_buffer[frame_index] / 65535.0).astype(np.float32)
-        histogram = cv2.calcHist([gray_img], [0], None, [1024], [0.0, 1.0]).flatten()
+    def update(self, exposure_us, gain, ring_buffer: RingBuffer):
+        gray_img = (ring_buffer.frame_buffer[ring_buffer.frame_index] / 65535.0).astype(np.float32)[::4, ::4]
+        histogram = cv2.calcHist([gray_img], [0], None, [512], [0.0, 1.0]).flatten()
         histogram /= histogram.sum()
         cdf = np.clip(np.cumsum(histogram), 0.0, 1.0)
-        dark_ratio = cdf[10]
-        bright_ratio = 1.0 - cdf[1014]
+        dark_ratio = cdf[5]
+        bright_ratio = 1.0 - cdf[507]
+        if debug: print(f"AE: dark_ratio={dark_ratio:.8f}, bright_ratio={bright_ratio:.8f}")
 
         if self.smoothed_dark_ratio is None:
             self.smoothed_dark_ratio = dark_ratio
             self.smoothed_bright_ratio = bright_ratio
         else:
-            self.smoothed_dark_ratio = self.SMOOTHED_ALPHA * dark_ratio + (1 - self.SMOOTHED_ALPHA) * self.smoothed_dark_ratio
-            self.smoothed_bright_ratio = self.SMOOTHED_ALPHA * bright_ratio + (1 - self.SMOOTHED_ALPHA) * self.smoothed_bright_ratio
+            self.smoothed_dark_ratio = self.SMOOTHING_ALPHA * dark_ratio + (1 - self.SMOOTHING_ALPHA) * self.smoothed_dark_ratio
+            self.smoothed_bright_ratio = self.SMOOTHING_ALPHA * bright_ratio + (1 - self.SMOOTHING_ALPHA) * self.smoothed_bright_ratio
 
-    def predictive_jump_estimate(self, exposure_us, error_magnitude):
-        # Computes predictive exposure adjustment based on error magnitude.
-        if error_magnitude > 0.2:
-            target_luminance = (self.TARGET_DARK + self.TARGET_BRIGHT) / 2.0
-            self.error_ratio = self.smoothed_dark_ratio - target_luminance
-            predicted_exposure = exposure_us * (1 + 2.5 * self.error_ratio)
-            return np.clip(predicted_exposure, self.EXPOSURE_MIN, self.EXPOSURE_MAX)
-        return exposure_us
+        self.current_brightness = 0.5 * (1.0 - self.smoothed_dark_ratio) + 0.5 * self.smoothed_bright_ratio
 
-    def adjust_exposure(self, exposure_us, dark_error, bright_error):
-        # Adjusts exposure dynamically.
-        if dark_error > self.HYSTERESIS:
-            desired_exposure = exposure_us + self.aggressive_adaptive_step(dark_error, self.MAX_EXP_STEP, self.MIN_EXP_STEP, 80000)
-        elif bright_error > self.HYSTERESIS:
-            desired_exposure = exposure_us - self.aggressive_adaptive_step(bright_error, self.MAX_EXP_STEP, self.MIN_EXP_STEP, 80000)
+        if self.TARGET_BRIGHTNESS > 0:
+            self.brightness_error = np.round(np.log2(self.TARGET_BRIGHTNESS / self.current_brightness), 2) # avoids jiggering
         else:
-            desired_exposure = exposure_us
+            self.brightness_error = 0.0
 
-        new_exposure = max(self.EXPOSURE_MIN, min(desired_exposure, self.EXPOSURE_MAX))
-        return new_exposure, abs(new_exposure - exposure_us) > 1  # Return adjusted exposure and flag
+        self.state = ""
+        adjusted_gain = gain
 
-    def adjust_gain(self, gain, dark_error, bright_error):
-        # Adjusts gain dynamically.
-        if dark_error > self.HYSTERESIS and gain < self.MAX_GAIN:
-            gain += self.aggressive_adaptive_step(dark_error, self.MAX_GAIN_STEP, self.MIN_GAIN_STEP, 200)
-        elif bright_error > self.HYSTERESIS and gain > self.MIN_GAIN:
-            gain -= self.aggressive_adaptive_step(bright_error, self.MAX_GAIN_STEP, self.MIN_GAIN_STEP, 80)
-        elif abs(self.brightness_error) < 0.015 and abs(self.smoothed_bright_ratio - self.TARGET_BRIGHT) < 0.015:
-            gain += (self.TARGET_GAIN - gain) * self.GAIN_ADJUSTMENT_SPEED
+        if gain != self.TARGET_GAIN:
+            gain_error = self.COMPENSATION_FACTOR * self.brightness_error
+            proposed_gain = gain * np.power(2, gain_error)
+            crosses_target = (gain - self.TARGET_GAIN) * (proposed_gain - self.TARGET_GAIN) < 0
+            narrows_target = abs(proposed_gain - self.TARGET_GAIN) < abs(gain - self.TARGET_GAIN) and (gain - self.TARGET_GAIN) * (proposed_gain - self.TARGET_GAIN) >= 0
 
-        return min(max(gain, self.MIN_GAIN), self.MAX_GAIN)
+            if crosses_target:
+                adjusted_gain = self.TARGET_GAIN
+                adjusted_gain = np.clip(adjusted_gain, self.GAIN_MIN, self.GAIN_MAX)
+                self.state += " | setting gain to target"
+            elif narrows_target:
+                adjusted_gain = np.clip(proposed_gain, self.GAIN_MIN, self.GAIN_MAX)
+                self.state += " | gain narrowing to sweet spot"
 
-    def update(self, exposure_us, gain, frame_buffer, frame_index):
-        # Main update loop handling exposure and gain adaptation.
-        self.ema_smoothing(frame_buffer, frame_index)
+        gain_applied = np.log2(adjusted_gain / gain) if gain > 0 else 0.0
+        remain_error = self.COMPENSATION_FACTOR * self.brightness_error - gain_applied
+        proposed_exposure = exposure_us * np.power(2, remain_error)
 
-        dark_error = self.smoothed_dark_ratio - self.TARGET_DARK
-        bright_error = self.smoothed_bright_ratio - self.TARGET_BRIGHT
-        self.brightness_error = 0.5 * dark_error + 0.5 * (-bright_error)
-        error_magnitude = abs(self.brightness_error)
+        if proposed_exposure < self.EXPOSURE_MAX:
+            adjusted_exposure = proposed_exposure
+            self.state += " | adjusting exposure"
+        else:
+            adjusted_exposure = self.EXPOSURE_MAX
+            self.state += " | setting exposure to max"
 
-        # Early exit if within dead zone
-        if abs(dark_error) < 0.005 and abs(bright_error) < 0.005:
-            return exposure_us, gain
+        adjusted_exposure = np.clip(adjusted_exposure, self.EXPOSURE_MIN, self.EXPOSURE_MAX)
 
-        # Predictive adjustment for large errors
-        exposure_us = self.predictive_jump_estimate(exposure_us, error_magnitude)
+        exposure_applied = np.log2(adjusted_exposure / exposure_us) if exposure_us > 0 else 0.0
+        leftover_error = remain_error - exposure_applied
+        proposed_gain = adjusted_gain * np.power(2, leftover_error)
+        adjusted_gain = np.clip(proposed_gain, self.GAIN_MIN, self.GAIN_MAX)
+        self.state += " | adjusting gain for the rest"
 
-        # Exposure adjustment
-        if self.state == "adjust_exposure":
-            exposure_us, exposure_adjusted = self.adjust_exposure(exposure_us, dark_error, bright_error)
-            if exposure_adjusted:
-                return exposure_us, gain
-            else:
-                self.state = "adjust_gain"
+        if abs(adjusted_exposure - exposure_us) >= self.EXPOSURE_MIN_STEP:
+            new_exposure = adjusted_exposure
+            self.state += " | exposure update"
+        else:
+            new_exposure = exposure_us
+            self.state += " | no update for exposure"
 
-        # Gain adjustment
-        if self.state == "adjust_gain":
-            gain = self.adjust_gain(gain, dark_error, bright_error)
-            if self.EXPOSURE_MIN < exposure_us < self.EXPOSURE_MAX:
-                self.state = "adjust_exposure"
+        if abs(adjusted_gain - gain) >= self.GAIN_MIN_STEP:
+            new_gain = adjusted_gain
+            self.state += " | gain update"
+        else:
+            new_gain = gain
+            self.state += " | no update for gain"
 
-        return exposure_us, gain
+        if debug: print(f"AE(csv): brightness={self.current_brightness:.4f}, error={self.brightness_error:.4f}, exposure={int(new_exposure)}, gain={new_gain:.2f}, state={self.state}")
+        return new_exposure, new_gain
 
 class QHYCameraController:
     # Constants
@@ -193,12 +174,11 @@ class QHYCameraController:
     def __init__(self, sdk_path='/usr/local/lib/libqhyccd.so'):
         self.bpp = c_uint32(self.BITS_PER_PIXEL)
         self.channels = c_uint32(self.COLOR_CHANNELS)
-        self.ring_buffer = RingBuffer(self.ROI_WIDTH, self.ROI_HEIGHT)  # 🚀 Initialize RingBuffer
+        self.ring_buffer = RingBuffer(self.ROI_WIDTH, self.ROI_HEIGHT)  # Initialize RingBuffer
         self.x_offset = int((5544 - self.ROI_WIDTH) / 2) # [px]
         self.y_offset = int((3684 - self.ROI_HEIGHT) / 2) # [px]
         self.cycle = 1 / self.FPS_TARGET # [s]
         self.delay = max(self.MIN_DELAY_SEC, self.cycle - self.MIN_GRAB_TIME_SEC) # [s]
-        self.frame_index = 0
         self.w = c_uint32(self.ROI_WIDTH)
         self.h = c_uint32(self.ROI_HEIGHT)
         self.successes = 0
@@ -207,20 +187,40 @@ class QHYCameraController:
         # Auto-exposure
         self.ae_controller = AEController()
 
+        # Clean up leftover shared memory -------------------------------------------
+        try:
+            existing_shm = shared_memory.SharedMemory(name="cam_ring_buffer")
+            existing_shm2 = shared_memory.SharedMemory(name="metadata_ring_buffer")
+            existing_shm.close()
+            existing_shm2.close()
+            existing_shm.unlink()
+            existing_shm2.unlink()
+        except FileNotFoundError:
+            pass
+        except FileExistsError:
+            pass
+
         # Loading SDK
         self.sdk = CDLL(sdk_path)
         self._set_function_signatures()
+        
+        # Initialize the camera
         self.cam = None
         self.initialize_camera()
         self.set_exposure_and_gain()
-
-        # Create the ring buffer
-        self.create_ring_buffer()
+        
+        # CV2 window
+        #if debug:
+        #    window_title = "Sky360 debug preview - <q> = quit"
+        #    cv2.namedWindow(window_title, cv2.WINDOW_OPENGL)
+        #    cv2.resizeWindow(window_title, 800, 800)
+        #    print(f"Initialization: successfully opened CV2 window ✅")
 
         # Calibration
-        img = self.get_single_frame()
+        self.get_single_frame()
         self.set_live_mode()
-        self.calibrate_camera()
+        self.delay = self.calibrate_camera()
+        if debug: print(f"Calibration: updated delay: {self.delay:.4f}")
 
     def _set_function_signatures(self):
         # type_char_array_32 = c_char*32
@@ -258,12 +258,14 @@ class QHYCameraController:
         self.sdk.StopQHYCCDLive.restype = c_uint32
 
     def initialize_camera(self):
+        if debug: print(f"Initialisation: starting to initialize the camera")
         # Resetting USB
         try:
             subprocess.check_call(["usbreset", "Q183-Cool"])
         except subprocess.CalledProcessError as e:
+            if debug: print("Resetting USB: ❌", e)
             exit(0)
-        time.sleep(2.0)
+        time.sleep(5.0)
 
         # Initializing SDK
         self.sdk.InitQHYCCDResource()
@@ -280,105 +282,143 @@ class QHYCameraController:
 
         # Opening camera
         self.cam = self.sdk.OpenQHYCCD(id_buffer)
+        if (self.cam != None):
+            if debug: print(f"Initialization: successfully opened camera {id_buffer.value.decode('utf-8').strip('\x00')} ✅")
+        else:
+            if debug: print(f"Initialization: failed to open camera ❌")
+        time.sleep(0.2)
 
         # Setting 16-bit mode
-        self.sdk.SetQHYCCDBitsMode(self.cam, 16)
+        ret = self.sdk.SetQHYCCDBitsMode(self.cam, 16)
+        if (ret == 0):
+            if debug: print(f"Initialization: successfully set bits mode to 16 ✅")
+        else:
+            if debug: print(f"Initialization: failed to set bits mode ❌")
         time.sleep(0.2)
 
         # Setting transfer bit
-        self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_TRANSFERBIT, 16)
+        ret = self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_TRANSFERBIT, 16)
         tbit = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_TRANSFERBIT)
+        if (ret == 0):
+            if debug: print(f"Initialization: successfully set transfer bit to {tbit} ✅")
+        else:
+            if debug: print(f"Initialization: failed to set transfer bit ❌")
         time.sleep(0.2)
 
         # Setting resolution
-        self.sdk.SetQHYCCDResolution(
+        ret = self.sdk.SetQHYCCDResolution(
             self.cam,
             c_uint(self.x_offset),
             c_uint(self.y_offset),
             c_uint(self.ROI_WIDTH),
             c_uint(self.ROI_HEIGHT)
         )
+        if (ret == 0):
+            if debug: print(f"Initialization: successfully set resolution to {self.x_offset}, {self.y_offset}, {self.ROI_WIDTH},{self.ROI_HEIGHT} ✅")
+        else:
+            if debug: print(f"Initialization: failed to set resolution ❌")
         time.sleep(0.2)
 
         # Setting USB traffic to 0
-        self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_USBTRAFFIC, 0)
+        ret = self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_USBTRAFFIC, 0)
+        if (ret == 0):
+            if debug: print(f"Initialization: successfully set USB traffic to automatic (0) ✅")
+        else:
+            if debug: print(f"Initialization: failed to set USB traffic ❌")
         time.sleep(0.2)
 
         # Initializing camera
-        self.sdk.InitQHYCCD(self.cam)
+        ret = self.sdk.InitQHYCCD(self.cam)
+        if (ret == 0):
+            if debug: print(f"Initialization: successfully initialized the camera ✅")
+        else:
+            if debug: print(f"Initialization: failed to initialize the camera ❌")
         time.sleep(2)
 
     def set_exposure_and_gain(self):
+        if debug: print(f"Initialization: setting exposure and gain ...")
         # Setting exposure and gain
-        self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_EXPOSURE, self.TARGET_EXPOSURE)
+        ret = self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_EXPOSURE, self.TARGET_EXPOSURE)
         self.exposure = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_EXPOSURE)
-
-        self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_GAIN, self.TARGET_GAIN)
+        if (ret == 0):
+            if debug: print(f"Initialization: successfully set exposure to {self.exposure} ✅")
+        else:
+            if debug: print(f"Initialization: failed to set exposure ❌")
+        
+        ret = self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_GAIN, self.TARGET_GAIN)
         self.gain = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_GAIN)
+        if (ret == 0):
+            if debug: print(f"Initialization: successfully set gain to {self.gain} ✅")
+        else:
+            if debug: print(f"Initialization: failed to set gain ❌")
         time.sleep(0.2)
 
     def set_live_mode(self):
+        if debug: print(f"Initialisation: setting live mode ...")
         # Setting mode for live frames
         ret = self.sdk.SetQHYCCDStreamMode(self.cam, 1)
-        time.sleep(1.0)
+        if (ret == 0):
+            if debug: print(f"Initialization: successfully set to live mode ✅")
+        else:
+            if debug: print(f"Initialization: failed to set live mode ❌")
+        time.sleep(0.2)
 
         # Setting resolution
         ret = self.sdk.SetQHYCCDResolution(self.cam, c_uint(self.x_offset), c_uint(self.y_offset), c_uint(self.ROI_WIDTH), c_uint(self.ROI_HEIGHT))
+        if (ret == 0):
+            if debug: print(f"Initialization: successfully set resolution to {self.x_offset}, {self.y_offset}, {self.ROI_WIDTH},{self.ROI_HEIGHT} ✅")
+        else:
+            if debug: print(f"Initialization: failed to set resolution ❌")
         time.sleep(0.2)
 
         # Begin live
         ret = self.sdk.BeginQHYCCDLive(self.cam)
-        time.sleep(1.0)
-
-    def create_ring_buffer(self):
-        # Get allocated memory size
-        ddr_bytes = self.sdk.GetQHYCCDMemLength(self.cam)
-        frame_bytes = self.ROI_WIDTH * self.ROI_HEIGHT  # Number of pixels per frame
-
-        # Create shared memory block for image data
-        shm = shared_memory.SharedMemory(create=True, size=self.RING_BUFFER_FRAMES * frame_bytes * 2, name="cam_ring_buffer")
-        frame_buffer = np.ndarray((self.RING_BUFFER_FRAMES, self.ROI_HEIGHT, self.ROI_WIDTH), dtype=np.uint16, buffer=shm.buf)
-
-        # Create shared memory block for metadata
-        timestamp_bytes = self.RING_BUFFER_FRAMES * np.dtype(np.float64).itemsize
-        shm2 = shared_memory.SharedMemory(create=True, size=timestamp_bytes, name="metadata_ring_buffer")
-        timestamp_buffer = np.ndarray((self.RING_BUFFER_FRAMES,), dtype=np.float64, buffer=shm2.buf)
-
-        # Temporary buffer for single frame retrieval
-        temp_buffer = (ctypes.c_uint16 * frame_bytes)()
-
-        time.sleep(2.0)  # Allow initialization delay
-
-        return frame_buffer, timestamp_buffer, temp_buffer, shm, shm2
+        if (ret == 0):
+            if debug: print(f"Initialization: successfully began live mode ✅")
+        else:
+            if debug: print(f"Initialization: failed to begin live mode ❌")
+        time.sleep(0.5)
 
     def get_single_frame(self):
-        img = None  # Default to None
+        if debug: print(f"Calibration: fetching 3 single frames ...")
+        # Temporary buffer for single frame retrieval
+        self.frame_bytes = self.ROI_WIDTH * self.ROI_HEIGHT
+        self.temp_buffer = (ctypes.c_uint16 * self.frame_bytes)()
         for i in range(3):
+            if debug: print(f"Calibration: exposing a single frame ...")
             ret = self.sdk.ExpQHYCCDSingleFrame(self.cam)
-            time.sleep(0.5)
+            if (ret == 0):
+                if debug: print(f"Calibration: successfully exposed a single frame ✅")
+            else:
+                if debug: print(f"Calibration: failed to expose a single frame ❌")
+            time.sleep(0.1)
             ret = self.sdk.GetQHYCCDSingleFrame(self.cam, byref(self.w), byref(self.h),
-                                                byref(self.bpp), byref(self.channels), self.buffer)
-            if ret == 0:
-                img = np.frombuffer(self.buffer, dtype=np.uint16).reshape((self.h.value, self.w.value))
+                                                byref(self.bpp), byref(self.channels), self.temp_buffer)
+            if (ret == 0):
+                if debug: print(f"Calibration: successfully fetched a single frame ✅")
+            else:
+                if debug: print(f"Calibration: failed to fetch a single frame ❌")
             time.sleep(1.5)
-        return img
+        return
 
     def calibrate_camera(self):
+        if debug: print(f"Calibration: fetching 10 live frames ...")
         delay = self.MIN_DELAY_SEC
-        successes = 0
+        self.successes = 0
         consecutive_failures = 0
+        ret = -1
 
-        while successes < self.MAX_FRAME_GRABS:
+        while self.successes < self.MAX_FRAME_GRABS:
             loop_start = time.perf_counter()
 
             # Try fetching a frame
-            ret = self.sdk.GetQHYCCDLiveFrame(self.cam, ctypes.byref(self.w), ctypes.byref(self.h), ctypes.byref(self.bpp), ctypes.byref(self.channels), self.buffer)
+            ret = self.sdk.GetQHYCCDLiveFrame(self.cam, ctypes.byref(self.w), ctypes.byref(self.h), ctypes.byref(self.bpp), ctypes.byref(self.channels), self.temp_buffer)
             grab_time = time.perf_counter() - loop_start
 
             if ret == 0:
                 consecutive_failures = 0
                 img_start = time.perf_counter()
-                img = np.frombuffer(self.buffer, dtype=np.uint16).reshape((self.h.value, self.w.value))
+                img = np.frombuffer(self.temp_buffer, dtype=np.uint16).reshape((self.h.value, self.w.value))
                 processing_time = time.perf_counter() - img_start
                 duration = grab_time + processing_time
                 self.speed = self.frame_bytes / duration
@@ -388,97 +428,109 @@ class QHYCameraController:
                 # Update delay dynamically
                 grab_and_process_time = time.perf_counter() - loop_start
                 delay = max(self.MIN_DELAY_SEC, self.cycle - grab_and_process_time)
+                if debug: print(f"Calibration: successfully fetched a live frame, delay={delay:.4f}s, successes={self.successes} ✅")
             else:
                 consecutive_failures += 1
                 time.sleep(self.FRAME_GRAB_PENALTY_SEC)
 
                 if consecutive_failures >= 5:
-                    time.sleep(self.FRAME_GRAB_PENALTY_SEC * 2)
+                    if debug: print(f"Calibration: 5 consecutive live frame grabs ❌")
+                    time.sleep(self.FRAME_GRAB_PENALTY_SEC * 5)
 
                     # Stop & restart live camera to resync
-                    self.sdk.StopQHYCCDLive(self.cam)
-                    time.sleep(1.0)
-                    self.sdk.BeginQHYCCDLive(self.cam)
-                    time.sleep(1.0)
+                    ret = self.sdk.StopQHYCCDLive(self.cam)
+                    if (ret == 0):
+                        if debug: print(f"Calibration: successfully stopped live mode ✅")
+                    else:
+                        if debug: print(f"Calibration: failed to stop live mode ❌")
+                    time.sleep(0.2)
+                    
+                    ret = self.sdk.BeginQHYCCDLive(self.cam)
+                    if (ret == 0):
+                        if debug: print(f"Calibration: successfully began live mode ✅")
+                    else:
+                        if debug: print(f"Calibration: failed to begin live mode ❌")
+                    time.sleep(0.2)
 
                     consecutive_failures = 0
 
                 delay += self.FRAME_SYNC_DELAY_STEP
-                delay += self.FRAME_SYNC_DELAY_STEP
-                delay_delta = self.FRAME_SYNC_DELAY_STEP if delay not in (self.MIN_DELAY_SEC, self.cycle) else -self.FRAME_SYNC_DELAY_STEP
-                successes -= 1
+                delay = max(self.MIN_DELAY_SEC, min(delay, self.cycle))
+                self.FRAME_SYNC_DELAY_STEP = self.FRAME_SYNC_DELAY_STEP if delay not in (self.MIN_DELAY_SEC, self.cycle) else -self.FRAME_SYNC_DELAY_STEP
+                self.successes -= 1
+                if debug: print(f"Calibration: failed to fetch a live frame ❌")
+                ret = -1
+                
             time.sleep(delay)
+            
         return delay
 
     # Temperature control
-    def control_temperature_pwm(self, frame_index: int):
-        if frame_index in {7, 107}:
+    def control_temperature_pwm(self):
+        if debug: print(f"Cooling: controlling cooler")
+        current_temp = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_CURTEMP)
+        current_pwm = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_CURPWM)
+
+        if current_temp < -100:
+            if debug: print("Warning: Invalid temperature reading, retrying...")
+            time.sleep(1.0)  # Blocking, consider logging instead
             current_temp = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_CURTEMP)
             current_pwm = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_CURPWM)
 
-            if current_temp < -100:
-                print("Warning: Invalid temperature reading, retrying...")
-                time.sleep(2.0)  # Blocking, consider logging instead
-                current_temp = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_CURTEMP)
-                current_pwm = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_CURPWM)
-
-            if abs(current_temp - self.TARGET_TEMP) > self.TEMPERATURE_TOLERANCE:
-                self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_COOLER, self.TARGET_TEMP)
+        if abs(current_temp - self.TARGET_TEMP) > self.TEMPERATURE_TOLERANCE:
+            self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_COOLER, self.TARGET_TEMP)
 
     def get_live_frame(self):
-        ret = self.sdk.GetQHYCCDLiveFrame(self.cam,
-                                          ctypes.byref(self.w),
-                                          ctypes.byref(self.h),
-                                          ctypes.byref(self.bpp),
-                                          ctypes.byref(self.channels),
-                                          self.buffer)
+        ret = self.sdk.GetQHYCCDLiveFrame(self.cam, ctypes.byref(self.w), ctypes.byref(self.h), ctypes.byref(self.bpp), ctypes.byref(self.channels), self.temp_buffer)
 
-        if ret == 0:
+        if (ret == 0):
             # Convert buffer to image
-            img = np.frombuffer(self.buffer, dtype=np.uint16).reshape((self.h.value, self.w.value))
-            self.ring_buffer.store_frame(img)  # 🚀 Store frame in ring buffer
+            img = np.frombuffer(self.temp_buffer, dtype=np.uint16).reshape((self.h.value, self.w.value))
+            self.ring_buffer.store_frame(img)  # Store frame in ring buffer
 
             # Auto-exposure correction at intervals
-            if self.ring_buffer.frame_index % self.EXPOSURE_ADJUST_INTERVAL == 0:
+            if (self.ring_buffer.frame_index % self.EXPOSURE_ADJUST_INTERVAL) == 0:
                 prev_exposure, prev_gain = self.exposure, self.gain
 
                 # Compute new exposure and gain using the ring buffer
                 self.exposure, self.gain = self.ae_controller.update(self.exposure,
                                                                      self.gain,
-                                                                     self.ring_buffer.frame_buffer,
-                                                                     self.ring_buffer.frame_index)
+                                                                     self.ring_buffer)
 
                 # Apply changes if significant
-                if abs(self.exposure - prev_exposure) > 1:
+                if abs(self.exposure - prev_exposure) > 0:
                     self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_EXPOSURE, self.exposure)
-                    self.exposure = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_EXPOSURE)
+                    #self.exposure = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_EXPOSURE)
 
-                if abs(self.gain - prev_gain) > 0.05:
+                if abs(self.gain - prev_gain) > 0:
                     self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_GAIN, self.gain)
-                    self.gain = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_GAIN)
+                    #self.gain = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_GAIN)
 
             # Perform temperature control
-            self.control_temperature_pwm(self.ring_buffer.frame_index)
-
+            if (self.ring_buffer.frame_index == 11) or (self.ring_buffer.frame_index == 111):
+                self.control_temperature_pwm()
+            
+            self.ring_buffer.frame_index = (self.ring_buffer.frame_index + 1) % self.ring_buffer.buffer_size  # Cycle index
             return img  # Return the processed frame
         return None
 
     def close(self):
-        self.ring_buffer.cleanup()
-
         # Stop live camera
         try:
             self.sdk.StopQHYCCDLive(self.cam)
             time.sleep(0.5)
         except Exception as e:
-            print(f"Error stopping live camera: {e}")
+            if debug: print(f"Error stopping live camera: {e}")
 
         # Stop cooler
         try:
             self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_MANULPWM, 0)
             time.sleep(0.5)
         except Exception as e:
-            print(f"Error stopping cooler: {e}")
+            if debug: print(f"Error stopping cooler: {e}")
+
+        # Cleaning up shared memory buffers
+        self.ring_buffer.cleanup()
 
         # Release SDK resources
         self.sdk.ReleaseQHYCCDResource()
@@ -487,32 +539,40 @@ class QHYCameraController:
         # Close camera connection
         self.sdk.CloseQHYCCD(self.cam)
         time.sleep(2.0)
+        
+        #cv2.destroyAllWindows()
+        time.sleep(0.2)
 
         # Reset USB
         try:
             subprocess.check_call(["usbreset", "Q183-Cool"])
-            print("Resetting USB: ✅")
         except subprocess.CalledProcessError as e:
-            print("Resetting USB: ❌", e)
-        time.sleep(1.0)
+            if debug: print("Resetting USB: ❌", e)
+        time.sleep(5.0)
 
 
 if __name__ == "__main__":
 
     qhy_camera = QHYCameraController()
 
+    if debug: print(f"Live: fetching live frames ...")
+    
     # Live loop
     while True:
         img = qhy_camera.get_live_frame()
 
-        if img is not None:
+        if img is not None and debug:
+            if debug: print(f"Live: successfully fetched a live frame, delay={qhy_camera.delay:.4f}s ✅")
+            
             # optional: for viewing (downsampled)
-            debayered_img = cv2.cvtColor(img, cv2.COLOR_BayerRG2RGB)
-            scaled_img = debayered_img[::4, ::4]
-            cv2.imshow("Image", scaled_img)
+            #debayered_img = cv2.cvtColor(img, cv2.COLOR_BayerRG2RGB)
+            #scaled_img = debayered_img[::4, ::4]
+            #cv2.imshow("Image", scaled_img)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
+        
+        time.sleep(qhy_camera.delay)
 
     # Close
     qhy_camera.close()
