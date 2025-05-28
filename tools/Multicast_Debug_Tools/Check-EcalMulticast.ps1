@@ -1,6 +1,6 @@
 # \copyright    Sky360.org
 #
-# \brief        Script to verify multicast configuration for Windows. 
+# \brief        Script to verify multicast configuration for Windows.
 #
 # ********************************************************
 #
@@ -40,7 +40,7 @@ if ($routes) {
     Warn "No multicast routes found for 239.0.0.0/24"
     Write-Host "You may add one using:"
     Write-Host '  route -p add 239.0.0.0 mask 255.255.255.0 <Your IP Address>'
-    Write-Host '  <Your IP Address> is the IP Address for you Active Adapter listed above'    
+    Write-Host '  <Your IP Address> is the IP Address for you Active Adapter listed above'
 }
 
 # 3. Check Windows Firewall status

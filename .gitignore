@@ -37,10 +37,6 @@ cmake_install.cmake
 Makefile
 *.o
 *.obj
-*.dll
-*.so
-*.a
-*.lib
 *.exe
 *.out
 

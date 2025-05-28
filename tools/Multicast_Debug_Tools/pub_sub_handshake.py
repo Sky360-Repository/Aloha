@@ -1,6 +1,6 @@
 # \copyright    Sky360.org
 #
-# \brief        Script test multicast using eCAL. 
+# \brief        Script test multicast using eCAL.
 #
 # ********************************************************
 
