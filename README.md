@@ -22,8 +22,11 @@ If you encounter a bug or have a feature request, you can contribute by opening 
 
 Please follow our documentation:
 - [Software Architecture](./doc/SoftwareArchitecture.md)
+- [Setting eCAL](./doc/eCAL.md)
+- [Multicast Route Configuration](./doc/Multicast_Route_Configuration.md)
+- [Time from GPS](./doc/Time_from_GPS.md)
 
-[- System Architecture ./doc/SystemsArchitecture.md ]: #
+[commented for now - System Architecture ./doc/SystemsArchitecture.md ]: #
 
 
 
