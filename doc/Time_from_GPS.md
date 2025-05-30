@@ -51,6 +51,26 @@ Check sync status:
 chronyc sources
 ```
 
+If you see in the first line of the output **#* GPS ...**, then you're good.
+
+If not, you might have run into a shared memory issue between gspd and chrony.
+
+Here's how to solve it:
+
+run
+```
+ntpshmmon
+```
+
+You will see shared memory segments called NTPx (0 is for SHM 0, 1 is for SHM 1, ...)
+
+Example:
+
+If you see eg. NTP2 only and SHM 0 and SHM 1 are blocked by permissions, use SHM 2 for your chrony.conf:
+```
+refclock SHM 2 delay 0.5 refid GPS
+```
+
 # Use Server Orange (with GPS) as the time authority, and sync the others to it.
 
 ## Option 1: Use chrony in a Local NTP Server Setup (Recommended)
