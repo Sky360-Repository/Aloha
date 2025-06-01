@@ -25,7 +25,7 @@ pip install src/contrib/ecal_whl/ecal5-5.13.3-cp312-cp312-linux_aarch64.whl
 
 # ecal5-5.13.3-cp312-cp312-linux_aarch64.whl
 
-If the .whl is missing or you have a dufferent setup, you need to compile the code and build the .whl binding.
+If the .whl is missing or you have a different setup, you need to compile the code and build the .whl binding.
 
 ## Ecal dependencies - may be optional
 This is a list of dependencies that were needed during the process.
@@ -50,6 +50,44 @@ python3 -m pip install setuptools
 
 sudo apt update
 ```
+
+Clone eCAL and checkout the version matching the applications installed. Go to eCAL Launcher and confirm the version, the version for this ecample was v5.13.3. The version in the code is a TAG v5.13.3.
+
+```
+cd ~/opt
+git clone https://github.com/eclipse-ecal/ecal.git
+cd ecal
+git checkout v5.13.3
+```
+
+Don't forget the submodules!!
+```
+git submodule sync --recursive && git submodule update --init --recursive
+```
+
+make:
+```
+mkdir build && cd build
+
+cmake -DPYTHON_EXECUTABLE=$(which python3) \
+      -DBUILD_PY_BINDING=ON \
+      -DBUILD_STANDALONE_PY_WHEEL=ON \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DECAL_THIRDPARTY_BUILD_PROTOBUF=OFF \
+      -DECAL_THIRDPARTY_BUILD_CURL=OFF \
+      -DECAL_THIRDPARTY_BUILD_HDF5=OFF \
+      -DECAL_THIRDPARTY_BUILD_QWT=OFF ..
+make -j4
+```
+
+Following eCAL documentation:
+```
+cmake --build . --target create_python_wheel --config Release
+```
+
+This should build ***~/opt/ecal/build/_deploy/ecal5-5.13.3-cp312-cp312-linux_aarch64.whl***
+
+Copy this file and pip install in the conda environment.
 
 # py hello eCAL
 From here you should be able to run the python examples in
