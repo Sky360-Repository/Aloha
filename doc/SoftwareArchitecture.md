@@ -89,6 +89,10 @@ git config --global mergetool.keepBackup false
 git config --global mergetool.trustExitCode false
 ```
 
+### Git quick guide
+Please follow git documentation:
+- [Git quick guide.md](Git_quick_guide.md)
+
 ## OpenCV
 
 - Dependencies (there might be some repeated, I lost track of it...):
