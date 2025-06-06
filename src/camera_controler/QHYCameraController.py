@@ -1,16 +1,31 @@
 #!/usr/bin/env python3
 # coding: utf-8
 
+import os
 import subprocess
 import time
 import numpy as np
 import cv2
 import ctypes
+import keyboard
 from ctypes import *
 from multiprocessing import shared_memory
+import h5py
+import threading
 
 debug = True
+data_dump = True
+quit_requested = False
 
+# Catching the ENTER key to exit
+def listen_for_key():
+    global quit_requested
+    input()
+    quit_requested = True
+
+threading.Thread(target=listen_for_key, daemon=True).start()
+if debug: print(f"⏹️ Press ENTER to quit. ⏹️")
+    
 # Time formatting -------------------------------------------
 def format_timestamp_utc(ts: float) -> str:
     #Format a UNIX timestamp to a UTC time string with milliseconds
@@ -33,10 +48,24 @@ class RingBuffer:
         
         if debug: print(f"RingBuffer: successfully created ring buffers {self.frame_buffer.shape} and {self.metadata_buffer.shape} ✅")
 
-    def store_frame(self, img: np.ndarray):
-        # Stores a frame in the ring buffer and updates timestamp
+    def export_to_hdf5(self, filepath: str):
+        with h5py.File(filepath, 'w') as f:
+            f.create_dataset("frames", data=self.frame_buffer, compression="gzip")
+            f.create_dataset("metadata", data=self.metadata_buffer, compression="gzip")
+            f.flush()
+            #os.fsync(f.fid.get_vfd_handle())
+        if debug: print(f"RingBuffer: exported and flushed to {filepath} ✅")
+
+    def store_frame(self, img: np.ndarray, exposure: float, gain: float):
         self.frame_buffer[self.frame_index] = img
-        self.metadata_buffer[self.frame_index] = time.time()
+        self.metadata_buffer[self.frame_index] = [time.time(), exposure, gain]
+        
+        if data_dump:
+            # Writing the buffers into an HDF5 file for testing
+            if self.frame_index == self.buffer_size - 1:
+                timestamp = format_timestamp_utc(time.time()).replace(':', '-').replace(' ', '_')
+                filename = f"/tmp/qhy_capture_{timestamp}.hdf5"
+                self.export_to_hdf5(filename)
 
     def cleanup(self):
         # Releases shared memory resources.
@@ -138,7 +167,7 @@ class AEController:
             new_gain = gain
             self.state += " | no update for gain"
 
-        if debug: print(f"AE(csv): brightness={self.current_brightness:.4f}, error={self.brightness_error:.4f}, exposure={int(new_exposure)}, gain={new_gain:.2f}, state={self.state}")
+        if debug: print(f"AE(csv): {ring_buffer.frame_index},{self.current_brightness:.4f},{self.brightness_error:.4f},{int(new_exposure)},{new_gain:.2f},{self.state}")
         return new_exposure, new_gain
 
 class QHYCameraController:
@@ -172,6 +201,19 @@ class QHYCameraController:
     FRAME_GRAB_PENALTY_SEC = 0.31  # Forced sleep in case of failed frame grab [seconds]
 
     def __init__(self, sdk_path='/usr/local/lib/libqhyccd.so'):
+        # Clean up leftover shared memory -------------------------------------------
+        try:
+            existing_shm = shared_memory.SharedMemory(name="cam_ring_buffer")
+            existing_shm2 = shared_memory.SharedMemory(name="metadata_ring_buffer")
+            existing_shm.close()
+            existing_shm2.close()
+            existing_shm.unlink()
+            existing_shm2.unlink()
+        except FileNotFoundError:
+            pass
+        except FileExistsError:
+            pass
+            
         self.bpp = c_uint32(self.BITS_PER_PIXEL)
         self.channels = c_uint32(self.COLOR_CHANNELS)
         self.ring_buffer = RingBuffer(self.ROI_WIDTH, self.ROI_HEIGHT)  # Initialize RingBuffer
@@ -186,19 +228,6 @@ class QHYCameraController:
 
         # Auto-exposure
         self.ae_controller = AEController()
-
-        # Clean up leftover shared memory -------------------------------------------
-        try:
-            existing_shm = shared_memory.SharedMemory(name="cam_ring_buffer")
-            existing_shm2 = shared_memory.SharedMemory(name="metadata_ring_buffer")
-            existing_shm.close()
-            existing_shm2.close()
-            existing_shm.unlink()
-            existing_shm2.unlink()
-        except FileNotFoundError:
-            pass
-        except FileExistsError:
-            pass
 
         # Loading SDK
         self.sdk = CDLL(sdk_path)
@@ -486,7 +515,7 @@ class QHYCameraController:
         if (ret == 0):
             # Convert buffer to image
             img = np.frombuffer(self.temp_buffer, dtype=np.uint16).reshape((self.h.value, self.w.value))
-            self.ring_buffer.store_frame(img)  # Store frame in ring buffer
+            self.ring_buffer.store_frame(img, self.exposure, self.gain)
 
             # Auto-exposure correction at intervals
             if (self.ring_buffer.frame_index % self.EXPOSURE_ADJUST_INTERVAL) == 0:
@@ -562,14 +591,14 @@ if __name__ == "__main__":
         img = qhy_camera.get_live_frame()
 
         if img is not None and debug:
-            if debug: print(f"Live: successfully fetched a live frame, delay={qhy_camera.delay:.4f}s ✅")
+            if debug: print(f"Live: successfully fetched live frame, delay={qhy_camera.delay:.4f}s ✅")
             
             # optional: for viewing (downsampled)
             #debayered_img = cv2.cvtColor(img, cv2.COLOR_BayerRG2RGB)
             #scaled_img = debayered_img[::4, ::4]
             #cv2.imshow("Image", scaled_img)
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+        if quit_requested:
             break
         
         time.sleep(qhy_camera.delay)
