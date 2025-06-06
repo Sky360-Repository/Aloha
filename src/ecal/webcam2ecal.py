@@ -26,7 +26,7 @@ def webcam2ecal(camera_id, channel_name, message_name, proto_file):
     # - CAP_MSMF (Microsoft Media Foundation)
     # - CAP_VFW (Video For Windows)
     #
-    # Backend available on Orang is V4L2
+    # Backend available on Orange is V4L2
     # Default is V4L2 but doesn't allow to change parameters
     cap = cv2.VideoCapture(camera_id)
 
@@ -45,12 +45,12 @@ def webcam2ecal(camera_id, channel_name, message_name, proto_file):
     # camera.set(cv2.CAP_PROP_AUTO_EXPOSURE, 3)
 
     # Set the properties
-    #camera.set(cv2.CAP_PROP_BRIGHTNESS,  0)     # min: 0, max: 255, default = 0.0
-    #camera.set(cv2.CAP_PROP_CONTRAST, 32.0)     # min: 0, max: 255, default = 32.0
-    #camera.set(cv2.CAP_PROP_SATURATION, 75)     # min: 0, max: 255, default = 60.0
-    #camera.set(cv2.CAP_PROP_HUE, 0)             # min: 0, max: 180, default = 0.0
-    #camera.set(cv2.CAP_PROP_GAIN, 0.0)          # min: 0, max: 255, default = 0.0
-    #camera.set(cv2.CAP_PROP_EXPOSURE, -5)       # min: -13, max: -1, default = -5.0
+    # camera.set(cv2.CAP_PROP_BRIGHTNESS,  0)     # min: 0, max: 255, default = 0.0
+    # camera.set(cv2.CAP_PROP_CONTRAST, 32.0)     # min: 0, max: 255, default = 32.0
+    # camera.set(cv2.CAP_PROP_SATURATION, 75)     # min: 0, max: 255, default = 60.0
+    # camera.set(cv2.CAP_PROP_HUE, 0)             # min: 0, max: 180, default = 0.0
+    # camera.set(cv2.CAP_PROP_GAIN, 0.0)          # min: 0, max: 255, default = 0.0
+    # camera.set(cv2.CAP_PROP_EXPOSURE, -5)       # min: -13, max: -1, default = -5.0
 
     print(f"max_width: {cap.get(cv2.CAP_PROP_FRAME_WIDTH)}")
     print(f"max_height: {cap.get(cv2.CAP_PROP_FRAME_HEIGHT)}")
