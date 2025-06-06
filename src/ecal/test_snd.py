@@ -8,6 +8,7 @@ import socket
 from ecal_util.proto_sender import ProtoSender
 from ecal_util.set_process_name import set_process_name
 
+
 def get_active_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.connect(("8.8.8.8", 80))  # Connect to a public server without sending data
@@ -15,10 +16,11 @@ def get_active_ip():
     s.close()
     return ip
 
+
 # Get local IP
 my_ip = get_active_ip()
 
-channel_name = "test messager"
+channel_name = "test massager"
 message_name = "test_msg"
 proto_file = "proto_files.test_proto_pb2"
 

@@ -56,7 +56,7 @@ conda activate sky360
 - Important tools
 
 ```
-sudo apt install -y g++ cmake make git gedit
+sudo apt install -y g++ cmake make git gedit git-gui
 ```
 
 ##  _~/dir_ and _~/opt_
