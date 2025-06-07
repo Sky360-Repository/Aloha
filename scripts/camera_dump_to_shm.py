@@ -6,6 +6,7 @@ import numpy as np
 from multiprocessing import shared_memory
 import sys
 import os
+import time
 
 def load_to_shm(hdf5_path, shm_name_frames="cam_ring_buffer", shm_name_meta="metadata_ring_buffer"):
     # Load HDF5 file
@@ -51,6 +52,7 @@ def load_to_shm(hdf5_path, shm_name_frames="cam_ring_buffer", shm_name_meta="met
     print("🟢 SHM loaded and ready. Press Ctrl+C to exit and release memory.")
     try:
         while True:
+            time.sleep(1)
             pass
     except KeyboardInterrupt:
         print("🛑 Exiting and cleaning up shared memory...")
