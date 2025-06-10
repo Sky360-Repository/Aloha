@@ -11,5 +11,5 @@ export LD_PRELOAD=/opt/libusb-1.0.22/lib/libusb-1.0.so.0.1.0
 #export LD_PRELOAD=/opt/libusb-1.0.25/lib/libusb-1.0.so.0.3.0
 
 # Start the Python script
-python3 ../src/camera_controler/qhy_controller//QHYCameraController.py
+python3 ../src/camera_controler/QHYCameraController.py
 

@@ -14,7 +14,7 @@ import h5py
 import threading
 
 debug = True
-data_dump = True
+data_dump = False
 quit_requested = False
 
 # Catching the ENTER key to exit
@@ -24,7 +24,7 @@ def listen_for_key():
     quit_requested = True
 
 threading.Thread(target=listen_for_key, daemon=True).start()
-if debug: print(f"⏹️ Press ENTER to quit. ⏹️")
+if debug: print(f"⏹️  Press ENTER to quit. ⏹️")
     
 # Time formatting -------------------------------------------
 def format_timestamp_utc(ts: float) -> str:
@@ -193,8 +193,8 @@ class QHYCameraController:
     MIN_DELAY_SEC = 0.03 # [s] floor for delay estimation
     MIN_GRAB_TIME_SEC = 0.102 # [s] minimum grabbing estimate for first delay
     RING_BUFFER_FRAMES = 200  # number of frames in ring buffer
-    MAX_FRAME_GRABS = 10 # max number of successful frame grabs
-    EXPOSURE_ADJUST_INTERVAL = 5 # Frequency of exposure/gain adjustments
+    MAX_FRAME_GRABS = 10 # max number of successful frame grabs during calibration
+    EXPOSURE_ADJUST_INTERVAL = 3 # Frequency of exposure/gain adjustments
 
     # Buffer & Processing Parameters
     FRAME_SYNC_DELAY_STEP = -0.001  # Decreasing delay step with new frame grabs [seconds]
@@ -496,9 +496,9 @@ class QHYCameraController:
 
     # Temperature control
     def control_temperature_pwm(self):
-        if debug: print(f"Cooling: controlling cooler")
         current_temp = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_CURTEMP)
         current_pwm = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_CURPWM)
+        if debug: print(f"Cooling: T={current_temp}°C, PWM={(100 * current_pwm / 255):.1f}%")
 
         if current_temp < -100:
             if debug: print("Warning: Invalid temperature reading, retrying...")
@@ -535,7 +535,7 @@ class QHYCameraController:
                     self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_GAIN, self.gain)
                     #self.gain = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_GAIN)
 
-            # Perform temperature control
+            # Perform temperature control at intervals
             if (self.ring_buffer.frame_index == 11) or (self.ring_buffer.frame_index == 111):
                 self.control_temperature_pwm()
             
@@ -588,10 +588,13 @@ if __name__ == "__main__":
     
     # Live loop
     while True:
+        prev_time = time.perf_counter()
         img = qhy_camera.get_live_frame()
 
         if img is not None and debug:
-            if debug: print(f"Live: successfully fetched live frame, delay={qhy_camera.delay:.4f}s ✅")
+            fps = 1 / (time.perf_counter() - prev_time + qhy_camera.delay)
+            qhy_camera.ring_buffer.frame_index
+            if debug: print(f"Live: Index={qhy_camera.ring_buffer.frame_index}, FPS={fps:.1f} ✅")
             
             # optional: for viewing (downsampled)
             #debayered_img = cv2.cvtColor(img, cv2.COLOR_BayerRG2RGB)
