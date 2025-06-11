@@ -1,0 +1,13 @@
+syntax = "proto2";
+
+package pb.sky;
+
+message SystemMetrics {
+  repeated string cpu = 1;
+  repeated string npu = 2;
+  repeated string rga = 3;
+  optional string gpu = 4;
+  optional string mem = 5;
+  optional string swap = 6;
+  optional string temp = 7;
+}
