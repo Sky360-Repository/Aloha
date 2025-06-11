@@ -24,7 +24,7 @@ class GaussianMixModels:
         self.min_std = 0.01  # 2.5 / 255 based on noise and quantization
 
         # Number of current possible backgrounds
-        self.nbr_curr_bacngrounds = np.minimum(3, np.floor(self.nbr_gaussians / 2))
+        self.nbr_curr_backgrounds = np.minimum(3, np.floor(self.nbr_gaussians / 2))
 
         # Initialize GMM parameters: shape = (img_height, img_width, img_channel, nbr_gaussians)
         self.mean = np.zeros((img_height, img_width, img_channel, self.nbr_gaussians), dtype=np.float32)
@@ -125,7 +125,7 @@ class GaussianMixModels:
         image_exp = image[:, :, :, None]  # (img_height, img_width, img_channel, 1)
 
         # Compute Mahalanobis distance to the first N gaussians
-        N = int(self.nbr_curr_bacngrounds)
+        N = int(self.nbr_curr_backgrounds)
         mean = self.mean[:, :, :, :N]  # (img_height, img_width, img_channel, N)
         std = self.std[:, :, :, :N]    # (img_height, img_width, img_channel, N)
 

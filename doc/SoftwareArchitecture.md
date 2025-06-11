@@ -153,6 +153,9 @@ conda init
 Please follow eCAL documentation:
 - [eCAL.md](eCAL.md)
 
-## Implementation of Gaussian Mixture of Models
-Please follow GMM documentation:
-- [GMM.md](GMM.md)
+## Implementation of Object Detection
+
+Please follow this documentation:
+- [Object Detection Architecture](ObjectDetectionArchitecture.md)
+- [ViBe](ViBe.md)
+- [Gaussian Mixture of Models](GMM.md)

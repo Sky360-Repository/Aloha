@@ -25,7 +25,7 @@ class Timer(object):
         print('Elapsed: %s' % (time.time() - self.tstart))
 
 
-def main(camera_id: np.uint8 = 0, max_nbr_gaussians: np.uint8 = 5, learning_factor: np.float32 = 0.5, is_color: bool = True):
+def main(camera_id: np.uint8 = 0, nbr_gaussians: np.uint8 = 5, learning_factor: np.float32 = 0.5, is_color: bool = True):
     cap = cv2.VideoCapture(camera_id)
 
     # Set auto exposure to off (mode 1) or manual mode (mode 0.75)
@@ -51,7 +51,7 @@ def main(camera_id: np.uint8 = 0, max_nbr_gaussians: np.uint8 = 5, learning_fact
     frame = cv2.resize(frame, (800, 600))
     cv2.namedWindow("Original", cv2.WINDOW_NORMAL)
     cv2.namedWindow("Foreground (abs diff)", cv2.WINDOW_NORMAL)
-    for i in range(max_nbr_gaussians):
+    for i in range(nbr_gaussians):
         cv2.namedWindow(f"{i} - Background (mean)", cv2.WINDOW_NORMAL)
 
     depth=3
@@ -60,7 +60,7 @@ def main(camera_id: np.uint8 = 0, max_nbr_gaussians: np.uint8 = 5, learning_fact
 
     height, width, _ = frame.shape
     with Timer('gmm init'):
-            gmm = GaussianMixModels((height, width, depth), max_nbr_gaussians, learning_factor)
+            gmm = GaussianMixModels((height, width, depth), nbr_gaussians, learning_factor)
 
     while True:
         ret, frame = cap.read()
@@ -95,7 +95,7 @@ def main(camera_id: np.uint8 = 0, max_nbr_gaussians: np.uint8 = 5, learning_fact
 
         cv2.imshow("Original", frame_u8)
         cv2.imshow("Foreground (abs diff)", foreground)
-        for i in range(max_nbr_gaussians):
+        for i in range(nbr_gaussians):
             background = np.clip((gmm.mean[..., i] + 0.5) * 255, 0, 255).astype(np.uint8)
             cv2.imshow(f"{i} - Background (mean)", background)
 
@@ -110,8 +110,8 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--camera_id", required=False,
                     help="Specify Camera ID: python test_gmm.py --camera_id 0")
-    ap.add_argument("--max_nbr_gaussians", required=False,
-                    help="Specify Camera ID: python test_gmm.py --max_nbr_gaussians 5")
+    ap.add_argument("--nbr_gaussians", required=False,
+                    help="Specify Camera ID: python test_gmm.py --nbr_gaussians 5")
     ap.add_argument("--learning_factor", required=False, type=float,
                     help="Specify Camera ID: python test_gmm.py --learning_factor 0.5")
     ap.add_argument("--is_color", required=False,
@@ -121,19 +121,19 @@ if __name__ == "__main__":
     # Default configurations
     camera_id = 0
     is_color = True
-    max_nbr_gaussians = 13
+    nbr_gaussians = 13
     learning_factor = 0.3
 
-    print("\n\nDefault usage: python test_gmm.py --camera_id 0 --max_nbr_gaussians 5 --learning_factor 0.5 --is_color True")
+    print("\n\nDefault usage: python test_gmm.py --camera_id 0 --nbr_gaussians 5 --learning_factor 0.5 --is_color True")
     print("\nPress 'Esc' key to stop\n")
 
     if args["camera_id"]:
         camera_id = int(args["camera_id"])
     if args["is_color"]:
         is_color = args["is_color"].lower() == "true"
-    if args["max_nbr_gaussians"]:
-        max_nbr_gaussians = int(args["max_nbr_gaussians"])
+    if args["nbr_gaussians"]:
+        nbr_gaussians = int(args["nbr_gaussians"])
     if args["learning_factor"]:
         learning_factor = args["learning_factor"]
 
-    main(camera_id, max_nbr_gaussians, learning_factor, is_color)
+    main(camera_id, nbr_gaussians, learning_factor, is_color)
