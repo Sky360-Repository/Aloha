@@ -51,7 +51,7 @@ def show_frame(index):
     #cv2.putText(scaled_img_8bit, f"Timestamp: {metadata_buffer[index][0]}", (10, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2, cv2.LINE_AA)
     cv2.putText(scaled_img_8bit, f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(metadata_buffer[index][0]))}", (10, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2, cv2.LINE_AA)
     
-    cv2.putText(scaled_img_8bit, f"Exposure: {metadata_buffer[index][1]:.2f} ms", (10, 85), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2, cv2.LINE_AA)
+    cv2.putText(scaled_img_8bit, f"Exposure: {metadata_buffer[index][1]:.2f} µs", (10, 85), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2, cv2.LINE_AA)
     
     cv2.putText(scaled_img_8bit, f"Gain: {metadata_buffer[index][2]:.2f}", (10, 115), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2, cv2.LINE_AA)
 

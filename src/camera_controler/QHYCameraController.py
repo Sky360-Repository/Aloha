@@ -194,7 +194,7 @@ class QHYCameraController:
     MIN_GRAB_TIME_SEC = 0.102 # [s] minimum grabbing estimate for first delay
     RING_BUFFER_FRAMES = 200  # number of frames in ring buffer
     MAX_FRAME_GRABS = 10 # max number of successful frame grabs during calibration
-    EXPOSURE_ADJUST_INTERVAL = 3 # Frequency of exposure/gain adjustments
+    EXPOSURE_ADJUST_INTERVAL = 4 # Frequency of exposure/gain adjustments
 
     # Buffer & Processing Parameters
     FRAME_SYNC_DELAY_STEP = -0.001  # Decreasing delay step with new frame grabs [seconds]
@@ -406,7 +406,7 @@ class QHYCameraController:
             if debug: print(f"Initialization: successfully began live mode ✅")
         else:
             if debug: print(f"Initialization: failed to begin live mode ❌")
-        time.sleep(0.5)
+        time.sleep(0.2)
 
     def get_single_frame(self):
         if debug: print(f"Calibration: fetching 3 single frames ...")
@@ -592,7 +592,7 @@ if __name__ == "__main__":
         img = qhy_camera.get_live_frame()
 
         if img is not None and debug:
-            fps = 1 / (time.perf_counter() - prev_time + qhy_camera.delay)
+            fps = 1 / (time.perf_counter() - prev_time)
             qhy_camera.ring_buffer.frame_index
             if debug: print(f"Live: Index={qhy_camera.ring_buffer.frame_index}, FPS={fps:.1f} ✅")
             
