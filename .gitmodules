@@ -1,0 +1,3 @@
+[submodule "src/contrib/bobcamera"]
+	path = src/contrib/bobcamera
+	url = https://github.com/bobcamera/bobcamera.git
