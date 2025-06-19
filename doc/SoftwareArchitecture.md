@@ -152,3 +152,7 @@ conda init
 ## Setting eCAL
 Please follow eCAL documentation:
 - [eCAL.md](eCAL.md)
+
+## Implementation of Gaussian Mixture of Models
+Please follow GMM documentation:
+- [GMM.md](GMM.md)
