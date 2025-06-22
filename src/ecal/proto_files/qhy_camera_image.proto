@@ -1,0 +1,15 @@
+syntax = "proto2";
+
+package pb.sky;
+
+message qhy_camera_image {
+    optional uint32             width         = 1 [default = 0]; // Width of image (mandatory for raw format)
+    optional uint32             height        = 2 [default = 0]; // Height of image (mandatory for raw format)
+
+    // RAW FORMAT FIELDS
+    optional uint32             bit_per_pixel = 3 [default = 0]; // Mandatory for raw format
+    optional bytes              raw_image     = 4;               // Raw image frame
+
+    // Time stamp
+    optional int64              time_stamp    = 5;  /// [0,...,2**64] [10**-6*s] Time stamp value in microseconds
+}
