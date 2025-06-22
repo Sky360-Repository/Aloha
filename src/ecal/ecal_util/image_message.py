@@ -41,6 +41,26 @@ class WebCameraImageStrategy(ImageStrategy):
         return self.time_stamp
 
 
+# Concrete strategy for QHY_ImageStrategy
+class QHY_ImageStrategy(ImageStrategy):
+    def __init__(self):
+        self.time_stamp = 0
+
+    def process_message(self, message):
+        # Convert the raw image data back into an image
+        frame = np.frombuffer(message.raw_image, dtype=np.uint16)
+        frame = frame.reshape((message.height, message.width, 3))
+        debayered_img = cv2.cvtColor(frame, cv2.COLOR_BayerRG2RGB)
+        self.rgb = debayered_img[::4, ::4]
+        self.time_stamp = message.time_stamp
+
+    def get_rgb_image(self):
+        return self.rgb
+
+    def get_time_stamp(self):
+        return self.time_stamp
+
+
 # Concrete strategy for CameraImage
 class CameraImageStrategy(ImageStrategy):
     def __init__(self):
@@ -75,6 +95,9 @@ class ImageMessage:
     def __init__(self, message: str):
         if message == "web_camera_image":
             self._strategy = WebCameraImageStrategy()
+
+        if message == "qhy_camera_image":
+            self._strategy = QHY_ImageStrategy()
 
         elif message == "CameraImage":
             self._strategy = CameraImageStrategy()
