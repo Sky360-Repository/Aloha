@@ -587,16 +587,18 @@ if __name__ == "__main__":
 
     qhy_camera = QHYCameraController()
 
-    if debug: print(f"Live: fetching live frames ...")
+    print(f"Live: fetching live frames ...")
     
     # Live loop
     while True:
         prev_time = time.perf_counter()
         img = qhy_camera.get_live_frame()
 
-        if img is not None and debug:
+        if img is not None:
             fps = 1 / (time.perf_counter() - prev_time)
             if debug: print(f"Live: Index={qhy_camera.ring_buffer.frame_index}, FPS={fps:.1f} ✅")
+        else:
+            print(f"Live: Index={qhy_camera.ring_buffer.frame_index} not acquired ❌")
 
 
         if quit_requested:

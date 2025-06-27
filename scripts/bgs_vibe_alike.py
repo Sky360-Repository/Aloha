@@ -100,21 +100,22 @@ def update_stable_mask(stable_fg_mask, vote_mask, decay):
             stable_fg_mask[y, x] = decay * stable_fg_mask[y, x] + (1.0 - decay) * (vote_mask[y, x] / 255.0)
     return stable_fg_mask
 
-def update_stable_mask_vec(stable_fg_mask, vote_mask, decay):
-    stable_fg_mask *= decay
-    stable_fg_mask += (1.0 - decay) * (vote_mask.astype(np.float32) / 255.0)
-    return stable_fg_mask
-
 def get_newest_index(timestamps: np.ndarray) -> int:
     return int(np.argmax(timestamps))
 
-# Connect SHM
+# Create shared memory for final mask output
+mask_frame_shape = (RING_SIZE, *FRAME_SHAPE)
+mask_frame_bytes = np.prod(mask_frame_shape) * np.dtype(np.uint8).itemsize
+mask_shm = shared_memory.SharedMemory(create=True, size=mask_frame_bytes, name="mask_ring_buffer")
+
+# Connect to SHMs for image and meta data
 image_shm = shared_memory.SharedMemory(name=CAM_SHM_NAME)
 meta_shm = shared_memory.SharedMemory(name=META_SHM_NAME)
 resource_tracker.unregister(image_shm._name, 'shared_memory')
 resource_tracker.unregister(meta_shm._name, 'shared_memory')
 
 # Adressing the SHMs
+mask_np = np.ndarray(mask_frame_shape, dtype=np.uint8, buffer=mask_shm.buf)
 image_np = np.ndarray((RING_SIZE, *FULL_SHAPE), dtype=np.uint16, buffer=image_shm.buf)[:, ::DOWNSAMPLE, ::DOWNSAMPLE]
 meta_np = np.ndarray((RING_SIZE,), dtype=meta_dtype, buffer=meta_shm.buf)
 
@@ -137,8 +138,8 @@ for i, idx in enumerate(ordered_indices):
 if debug: print("History buffer: buffer initialized - start processing loop ...")
 prev_latest_idx = start_idx
 
-cv2.namedWindow(window_title, cv2.WINDOW_NORMAL)
-cv2.resizeWindow(window_title, FRAME_SHAPE[1], FRAME_SHAPE[0])
+#cv2.namedWindow(window_title, cv2.WINDOW_NORMAL)
+#cv2.resizeWindow(window_title, FRAME_SHAPE[1], FRAME_SHAPE[0])
 
 try:
     while True:
@@ -161,15 +162,18 @@ try:
 
         start_time = time.perf_counter()
         
+        # Create the pre-calculated random matrix for each frame (speeding up JIT)
         if debug: proc_time = time.perf_counter()
         rand_indices = np.random.randint(HISTORY_LEN, size=FRAME_SHAPE, dtype=np.uint8)
         if debug: print(f"random buffer creation: {(time.perf_counter() - proc_time):.4f}s")
         
+        # BGS processing the frame (switching between random and min/max buffer pixel exchange)
         if debug: proc_time = time.perf_counter()
         update_toggle = True if update_toggle == False else False
         fg_mask, history = process_frame(frame, history, MATCH_THRESHOLD, REQUIRED_MATCHES, update_toggle, rand_indices)
         if debug: print(f"BGS compute: {(time.perf_counter() - proc_time):.4f}s")
 
+        # Noise reduction
         if debug: proc_time = time.perf_counter()
         if morph_open > 1:
             fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_OPEN, kernel_open)
@@ -177,20 +181,25 @@ try:
             fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_CLOSE, kernel_close)
         if debug: print(f"morphing compute: {(time.perf_counter() - proc_time):.4f}s")
 
+        # Smoothing the history buffer
         if debug: proc_time = time.perf_counter()
         fg_mask_history.append(fg_mask.copy())
         vote_mask = fg_mask.copy()
         if len(fg_mask_history) == FG_HISTORY_LEN:
             stacked = np.stack(fg_mask_history, axis=0)
             vote_mask = (np.sum(stacked, axis=0) > (255 * FG_HISTORY_LEN // 2)).astype(np.uint8) * 255 # 8bit
-
         stable_fg_mask = update_stable_mask(fg_mask, vote_mask, SMOOTHING_DECAY)
         final_mask = (stable_fg_mask > 0.5).astype(np.uint8) * 255 # 8bit
         if debug: print(f"smoothing compute: {(time.perf_counter() - proc_time):.4f}s")
-
+        
+        # Writing final mask into SHM
+        mask_np[current_idx] = final_mask
+        
+        """
+        # Debugging
         fps = 1 / (time.perf_counter() - start_time)
         num_fg_pixels = np.count_nonzero(final_mask) / final_mask.size * 100
-        if debug: print(f"resulting FPS: {fps:.2f} -----------------")
+        if debug: print(f"resulting FPS: {fps:.2f}, mask pixels: {num_fg_pixels:.2f}% -----------------")
 
         # Statistics
         if stats:
@@ -234,7 +243,7 @@ try:
             SMOOTHING_DECAY += 0.01
         elif key == ord('x'):
             SMOOTHING_DECAY -= 0.01
-            
+        """
             
 
 except KeyboardInterrupt:
@@ -243,6 +252,7 @@ except KeyboardInterrupt:
 finally:
     image_shm.close()
     meta_shm.close()
-    cv2.destroyAllWindows()
+    mask_shm.close()
+    #cv2.destroyAllWindows()
     print("Cleaned up.")
 
