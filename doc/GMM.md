@@ -8,13 +8,13 @@ This class implements a **Gaussian Mixture Model (GMM)** per pixel for backgroun
 
 * **Inputs**:
   * `img_size`: Tuple of (Height, Width, Channels)
-  * `max_nbr_gaussians`: Max number of Gaussians per pixel (default 7)
+  * `nbr_gaussians`: Number of Gaussians per pixel (default 7)
   * `learning_factor`: Update rate per frame (e.g., 0.05 means slow learning)
 
 * **Key Parameters**:
   * `self.mean`, `self.std`, `self.weight`: Shape = `(H, W, C, G)` or `(H, W, G)`
   * `initial_std`: Starting variance per Gaussian (very low, assuming little noise)
-  * `nbr_curr_bacngrounds`: Number of top Gaussians considered as valid background
+  * `nbr_curr_backgrounds`: Number of top Gaussians considered as valid background
   * `executor`: Thread pool with 1 worker for asynchronous background updates
 
 * **Diagnostics**:
