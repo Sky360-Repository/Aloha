@@ -155,7 +155,7 @@ Please follow eCAL documentation:
 
 ## Implementation of Object Detection
 
-Please follow this documentation:
+Please follow this documentation
 - [Object Detection Architecture](ObjectDetectionArchitecture.md)
 - [ViBe](ViBe.md)
 - [Gaussian Mixture of Models](GMM.md)
