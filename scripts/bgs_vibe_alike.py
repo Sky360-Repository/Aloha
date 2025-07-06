@@ -4,42 +4,56 @@
 import numpy as np
 import cv2
 import time
+import keyboard
 from collections import deque
 from numba import njit, prange
 from multiprocessing import shared_memory
 import multiprocessing.resource_tracker as resource_tracker
 
 # SETTINGS
-LIVE_MODE = True  # ← set to False to process SHM sequentially (pre-loaded from hdf5 file)
+LIVE_MODE = True # True is syncing with camera, False starts with SHMs 
 RING_SIZE = 200
 FULL_SHAPE = (3200, 3200)
 DOWNSAMPLE = 2
 FRAME_SHAPE = (FULL_SHAPE[0] // DOWNSAMPLE, FULL_SHAPE[1] // DOWNSAMPLE)
 PIXEL_SIZE = 2
-HISTORY_LEN = 30
+HISTORY_LEN = 16
 FG_HISTORY_LEN = 5
-MATCH_THRESHOLD = 1600 # [0..32767]
+MATCH_THRESHOLD = 800  # [0..32767]
 REQUIRED_MATCHES = 2
+SMOOTHING_DECAY = 0.9  # exponential smoothing factor
+update_toggle = True
 window_title = "Live BGS viewer - press 'q' to quit."
-morph_open = 5
-morph_close = 5
-USE_RANDOM_UPDATE = True  # set True to use original ViBe random replacement
-if USE_RANDOM_UPDATE:
-    print("using ViBe random replacement")
-else:
-    print("using Richards min/max replacement")
+morph_open = 3
+morph_close = 3
 
-# SHM settings
+# Debugging
+debug = True
+stats = False
+
+# SHM
 CAM_SHM_NAME = "cam_ring_buffer"
 META_SHM_NAME = "metadata_ring_buffer"
 meta_dtype = np.dtype([("timestamp", "f8"), ("exposure", "f8"), ("gain", "f8")])
 
+# TODO
+# adjust to current exposure and gain changes
+
 # FG smoothing
 fg_mask_history = deque(maxlen=FG_HISTORY_LEN)
+stable_fg_mask = np.zeros(FRAME_SHAPE, dtype=np.float32)
+
+# Morphing structure
+kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (morph_open, morph_open))
+kernel_close = cv2.getStructuringElement(cv2.MORPH_RECT, (morph_close, morph_close))
 
 @njit(parallel=True)
-def process_frame(curr_frame: np.ndarray, history: np.ndarray, match_threshold: int, required_matches: int, use_random_update: bool) -> (np.ndarray, np.ndarray):
-
+def process_frame(curr_frame: np.ndarray,
+                  history: np.ndarray,
+                  match_threshold: int,
+                  required_matches: int,
+                  update_: bool,
+                  rand_indices: np.ndarray) -> (np.ndarray, np.ndarray):
     height, width = curr_frame.shape
     fg_mask = np.zeros((height, width), dtype=np.uint8)
     hist_len = history.shape[2]
@@ -47,15 +61,16 @@ def process_frame(curr_frame: np.ndarray, history: np.ndarray, match_threshold: 
     for y in prange(height):
         for x in range(width):
             px = curr_frame[y, x]
-            samples = history[y, x, :]
             match_count = 0
-
-            min_val = max_val = samples[0]
-            min_idx = max_idx = 0
+            min_val = 0
+            max_val = 0
+            min_idx = 0
+            max_idx = 0
 
             for i in range(hist_len):
-                s = samples[i]
-                if abs(int(s) - int(px)) < match_threshold:
+                s = history[y, x, i]
+                diff = s - px if s >= px else px - s
+                if s > 5 and diff < match_threshold:
                     match_count += 1
                 if s < min_val:
                     min_val = s
@@ -65,63 +80,66 @@ def process_frame(curr_frame: np.ndarray, history: np.ndarray, match_threshold: 
                     max_idx = i
 
             if match_count >= required_matches:
-                # background
-                if use_random_update:
-                    # ViBe original: randomly choose a sample to update
-                    history[y, x, np.random.randint(hist_len)] = px
-                    # changing a second pixel
-                    history[y, x, np.random.randint(hist_len)] = px
-                    history[y, x, np.random.randint(hist_len)] = px
+                if update_:
+                    history[y, x, rand_indices[y, x]] = px
                 else:
-                    # Richard logic: update either min or max
-                    if abs(int(min_val) - int(px)) > abs(int(max_val) - int(px)):
+                    if abs(min_val - px) > abs(max_val - px):
                         history[y, x, min_idx] = px
                     else:
                         history[y, x, max_idx] = px
             else:
-                # foreground
                 fg_mask[y, x] = 255
 
     return fg_mask, history
 
+@njit(parallel=True)
+def update_stable_mask(stable_fg_mask, vote_mask, decay):
+    height, width = stable_fg_mask.shape
+    for y in prange(height):
+        for x in range(width):
+            stable_fg_mask[y, x] = decay * stable_fg_mask[y, x] + (1.0 - decay) * (vote_mask[y, x] / 255.0)
+    return stable_fg_mask
+
 def get_newest_index(timestamps: np.ndarray) -> int:
     return int(np.argmax(timestamps))
 
-# Attach to shared memory (identical for live and offline mode)
+# Create shared memory for final mask output
+mask_frame_shape = (RING_SIZE, *FRAME_SHAPE)
+mask_frame_bytes = np.prod(mask_frame_shape) * np.dtype(np.uint8).itemsize
+mask_shm = shared_memory.SharedMemory(create=True, size=mask_frame_bytes, name="mask_ring_buffer")
+
+# Connect to SHMs for image and meta data
 image_shm = shared_memory.SharedMemory(name=CAM_SHM_NAME)
 meta_shm = shared_memory.SharedMemory(name=META_SHM_NAME)
 resource_tracker.unregister(image_shm._name, 'shared_memory')
 resource_tracker.unregister(meta_shm._name, 'shared_memory')
 
+# Adressing the SHMs
+mask_np = np.ndarray(mask_frame_shape, dtype=np.uint8, buffer=mask_shm.buf)
 image_np = np.ndarray((RING_SIZE, *FULL_SHAPE), dtype=np.uint16, buffer=image_shm.buf)[:, ::DOWNSAMPLE, ::DOWNSAMPLE]
 meta_np = np.ndarray((RING_SIZE,), dtype=meta_dtype, buffer=meta_shm.buf)
 
-# Initialize history
+# Init history
 history = np.zeros((*FRAME_SHAPE, HISTORY_LEN), dtype=np.uint16)
-print("Waiting for sufficient history frames...")
-
+if debug: print("Waiting for sufficient history frames...")
 while True:
-    timestamps = meta_np["timestamp"]
-    if np.count_nonzero(timestamps > 0) >= HISTORY_LEN:
+    if np.count_nonzero(meta_np["timestamp"] > 0) >= HISTORY_LEN:
         break
-    print("Waiting for frames...", flush=True)
     time.sleep(0.1)
 
+# Syncing with camera controller
 latest_idx = get_newest_index(meta_np["timestamp"])
-if LIVE_MODE:
-    start_idx = latest_idx
-else:
-    start_idx = (latest_idx - HISTORY_LEN + 1) % RING_SIZE
-
+start_idx = latest_idx if LIVE_MODE else (latest_idx - HISTORY_LEN + 1) % RING_SIZE
 ordered_indices = [(start_idx + i) % RING_SIZE for i in range(HISTORY_LEN)]
+
 for i, idx in enumerate(ordered_indices):
     history[:, :, i] = image_np[idx]
 
-print("History initialized. Starting processing loop...")
+if debug: print("History buffer: buffer initialized - start processing loop ...")
 prev_latest_idx = start_idx
 
-cv2.namedWindow(window_title, cv2.WINDOW_NORMAL)
-cv2.resizeWindow(window_title, FRAME_SHAPE[1], FRAME_SHAPE[0])
+#cv2.namedWindow(window_title, cv2.WINDOW_NORMAL)
+#cv2.resizeWindow(window_title, FRAME_SHAPE[1], FRAME_SHAPE[0])
 
 try:
     while True:
@@ -134,51 +152,99 @@ try:
         else:
             current_idx = (prev_latest_idx + 1) % RING_SIZE
             if timestamps[current_idx] == 0:
-                print("End of offline data.")
+                if debug: print("end of offline data.")
                 break
 
         frame = image_np[current_idx]
         prev_latest_idx = current_idx
 
+        if debug: print(f"current index: {current_idx}")
+
         start_time = time.perf_counter()
-        fg_mask, history = process_frame(frame, history, MATCH_THRESHOLD, REQUIRED_MATCHES, USE_RANDOM_UPDATE)
+        
+        # Create the pre-calculated random matrix for each frame (speeding up JIT)
+        if debug: proc_time = time.perf_counter()
+        rand_indices = np.random.randint(HISTORY_LEN, size=FRAME_SHAPE, dtype=np.uint8)
+        if debug: print(f"random buffer creation: {(time.perf_counter() - proc_time):.4f}s")
+        
+        # BGS processing the frame (switching between random and min/max buffer pixel exchange)
+        if debug: proc_time = time.perf_counter()
+        update_toggle = True if update_toggle == False else False
+        fg_mask, history = process_frame(frame, history, MATCH_THRESHOLD, REQUIRED_MATCHES, update_toggle, rand_indices)
+        if debug: print(f"BGS compute: {(time.perf_counter() - proc_time):.4f}s")
 
+        # Noise reduction
+        if debug: proc_time = time.perf_counter()
         if morph_open > 1:
-            fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_OPEN, np.ones((morph_open, morph_open), np.uint8))
+            fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_OPEN, kernel_open)
         if morph_close > 1:
-            fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_CLOSE, np.ones((morph_close, morph_close), np.uint8))
+            fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_CLOSE, kernel_close)
+        if debug: print(f"morphing compute: {(time.perf_counter() - proc_time):.4f}s")
 
+        # Smoothing the history buffer
+        if debug: proc_time = time.perf_counter()
         fg_mask_history.append(fg_mask.copy())
+        vote_mask = fg_mask.copy()
         if len(fg_mask_history) == FG_HISTORY_LEN:
             stacked = np.stack(fg_mask_history, axis=0)
-            stable_fg_mask = (np.sum(stacked, axis=0) > (255 * FG_HISTORY_LEN // 2)).astype(np.uint8) * 255
-        else:
-            stable_fg_mask = fg_mask
-
+            vote_mask = (np.sum(stacked, axis=0) > (255 * FG_HISTORY_LEN // 2)).astype(np.uint8) * 255 # 8bit
+        stable_fg_mask = update_stable_mask(fg_mask, vote_mask, SMOOTHING_DECAY)
+        final_mask = (stable_fg_mask > 0.5).astype(np.uint8) * 255 # 8bit
+        if debug: print(f"smoothing compute: {(time.perf_counter() - proc_time):.4f}s")
+        
+        # Writing final mask into SHM
+        mask_np[current_idx] = final_mask
+        
+        """
+        # Debugging
         fps = 1 / (time.perf_counter() - start_time)
-        num_fg_pixels = np.count_nonzero(stable_fg_mask) / stable_fg_mask.size * 100
-        print(f"Frame {current_idx}: {fps:.2f} FPS, foreground pixels: {num_fg_pixels:.2f}%")
+        num_fg_pixels = np.count_nonzero(final_mask) / final_mask.size * 100
+        if debug: print(f"resulting FPS: {fps:.2f}, mask pixels: {num_fg_pixels:.2f}% -----------------")
 
-        # Convert 16-bit frame to 8-bit for display
-        frame_display = (frame.astype(np.float32) / 256).astype(np.uint8)
+        # Statistics
+        if stats:
+            var_frame = np.var(history, axis=2)
+            mean_var = np.mean(var_frame)
+            max_var = np.max(var_frame)
+            min_var = np.min(var_frame)
+            print(f"history variance profile: mean={mean_var:.2f}, max={max_var:.2f}, min={min_var:.2f}")
+            var_image = np.clip(np.sqrt(var_frame) / 64.0, 0, 255).astype(np.uint8)  # visual range tweak
+            var_heatmap = cv2.applyColorMap(var_image, cv2.COLORMAP_JET)
 
-        # Convert to 3-channel RGB
+        # Displaying the BGS results
+        frame_display = (frame.astype(np.float32) / 256).astype(np.uint8) # 8bit
         frame_rgb = cv2.cvtColor(frame_display, cv2.COLOR_BayerRG2RGB)
+        
+        if stats:
+            blended = cv2.addWeighted(frame_rgb, 0.3, var_heatmap, 0.7, 0)
+        else:
+            mask = final_mask != 0
+            blended = frame_rgb
+            blended[mask] = [0, 0, 255]
 
-        # Colorize the foreground mask (e.g., red)
-        overlay_color = np.zeros_like(frame_rgb)
-        overlay_color[:, :, 2] = stable_fg_mask  # Red channel only
+        cv2.putText(blended, f"Buffer index: {current_idx}", (10, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2, cv2.LINE_AA)
+        cv2.putText(blended, f"FPS: {fps:.2f}", (10, 85), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2, cv2.LINE_AA)
+        cv2.putText(blended, f"Foreground pixels: {num_fg_pixels:.2f}%", (10, 115), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2, cv2.LINE_AA)
+        cv2.putText(blended, f"Threshold: {MATCH_THRESHOLD} (+/-)", (10, 145), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2, cv2.LINE_AA)
+        cv2.putText(blended, f"Smoothing decay: {SMOOTHING_DECAY:.2f} (s/x)", (10, 175), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2, cv2.LINE_AA)
 
-        # Blend the overlay with the original frame
-        alpha = 0.8  # Transparency factor: 0 = transparent, 1 = opaque
-        blended = cv2.addWeighted(frame_rgb, 1.0, overlay_color, alpha, 0)
-
-        # Display the result
         cv2.imshow(window_title, blended)
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            print("Quit requested.")
+        key = cv2.waitKey(1) & 0xFF
+
+        if key == ord('q'):
+            if debug: print("Quit requested.")
             break
+        elif key == ord('+'):
+            MATCH_THRESHOLD += 50
+        elif key == ord('-'):
+            MATCH_THRESHOLD -= 50
+        elif key == ord('s'):
+            SMOOTHING_DECAY += 0.01
+        elif key == ord('x'):
+            SMOOTHING_DECAY -= 0.01
+        """
+            
 
 except KeyboardInterrupt:
     print("Interrupted.")
@@ -186,6 +252,7 @@ except KeyboardInterrupt:
 finally:
     image_shm.close()
     meta_shm.close()
-    cv2.destroyAllWindows()
+    mask_shm.close()
+    #cv2.destroyAllWindows()
     print("Cleaned up.")
 
