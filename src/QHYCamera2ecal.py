@@ -8,13 +8,12 @@ import time
 import cv2
 import argparse
 
-from ecal.ecal_util.proto_sender import ProtoSender
-from ecal.ecal_util.jpeg_compression import convert_image_to_byte_array
-from ecal.ecal_util.set_process_name import *
+from ecal_lib.ecal_util.proto_sender import ProtoSender
+from ecal_lib.ecal_util.set_process_name import *
 from camera_controler.QHYCameraController import QHYCameraController
 
 message_name = "qhy_camera_image"
-proto_file = "proto_files.qhy_camera_image_pb2"
+proto_file = "ecal_lib.proto_files.qhy_camera_image_pb2"
 
 def QHYCamera2ecal(channel_name, debug_view):
 
@@ -51,7 +50,7 @@ def QHYCamera2ecal(channel_name, debug_view):
             protobuf_message.bit_per_pixel = 16
             protobuf_message.raw_image = img.tobytes()
             protobuf_message.time_stamp = int(time.time() * 1.0e6)
-}
+
             # Send the message to the topic this publisher was created for
             proto_snd.send(protobuf_message)
 
