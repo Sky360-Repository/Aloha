@@ -11,7 +11,7 @@ from multiprocessing import shared_memory
 import multiprocessing.resource_tracker as resource_tracker
 
 # SETTINGS
-LIVE_MODE = True # True is syncing with camera, False starts with SHMs 
+LIVE_MODE = True # True is syncing with camera, False starts with SHMs
 RING_SIZE = 200
 FULL_SHAPE = (3200, 3200)
 DOWNSAMPLE = 2
@@ -161,12 +161,12 @@ try:
         if debug: print(f"current index: {current_idx}")
 
         start_time = time.perf_counter()
-        
+
         # Create the pre-calculated random matrix for each frame (speeding up JIT)
         if debug: proc_time = time.perf_counter()
         rand_indices = np.random.randint(HISTORY_LEN, size=FRAME_SHAPE, dtype=np.uint8)
         if debug: print(f"random buffer creation: {(time.perf_counter() - proc_time):.4f}s")
-        
+
         # BGS processing the frame (switching between random and min/max buffer pixel exchange)
         if debug: proc_time = time.perf_counter()
         update_toggle = True if update_toggle == False else False
@@ -191,10 +191,10 @@ try:
         stable_fg_mask = update_stable_mask(fg_mask, vote_mask, SMOOTHING_DECAY)
         final_mask = (stable_fg_mask > 0.5).astype(np.uint8) * 255 # 8bit
         if debug: print(f"smoothing compute: {(time.perf_counter() - proc_time):.4f}s")
-        
+
         # Writing final mask into SHM
         mask_np[current_idx] = final_mask
-        
+
         """
         # Debugging
         fps = 1 / (time.perf_counter() - start_time)
@@ -214,7 +214,7 @@ try:
         # Displaying the BGS results
         frame_display = (frame.astype(np.float32) / 256).astype(np.uint8) # 8bit
         frame_rgb = cv2.cvtColor(frame_display, cv2.COLOR_BayerRG2RGB)
-        
+
         if stats:
             blended = cv2.addWeighted(frame_rgb, 0.3, var_heatmap, 0.7, 0)
         else:
@@ -244,7 +244,7 @@ try:
         elif key == ord('x'):
             SMOOTHING_DECAY -= 0.01
         """
-            
+
 
 except KeyboardInterrupt:
     print("Interrupted.")
