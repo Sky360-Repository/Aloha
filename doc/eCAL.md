@@ -94,7 +94,7 @@ From here you should be able to run the python examples in
 
 There's an hello world in
 ```
-Aloha/src/ecal
+Aloha/src/ecal_lib
 ```
 
 Basic test:

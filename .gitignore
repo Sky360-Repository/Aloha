@@ -48,3 +48,6 @@ Makefile
 # === OS-Specific ===
 .DS_Store
 Thumbs.db
+
+# === Proto bindings ===
+src/ecal_lib/proto_files/*.py
