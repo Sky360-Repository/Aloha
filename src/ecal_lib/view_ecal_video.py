@@ -30,18 +30,18 @@ def view_ecal_video(channel_name, message_name, proto_file):
             image_msg.process_message(proto_rec.message)
             frame = image_msg.get_rgb_image()
 
-            # Overlay the time stamp
-            frame_overlay = cv2.putText(frame, "time_stamp: " + str(image_msg.get_time_stamp()), (30, 30),
-                                        cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 2,
-                                        cv2.LINE_AA)
-
-            # Overlay the channel Name
-            frame_overlay = cv2.putText(frame_overlay, "channel: " + channel_name, (30, 100),
-                                        cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255),
-                                        2, cv2.LINE_AA)
+            # # Overlay the time stamp
+            # frame_overlay = cv2.putText(frame, "time_stamp: " + str(image_msg.get_time_stamp()), (30, 30),
+            #                             cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 2,
+            #                             cv2.LINE_AA)
+            #
+            # # Overlay the channel Name
+            # frame_overlay = cv2.putText(frame_overlay, "channel: " + channel_name, (30, 100),
+            #                             cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255),
+            #                             2, cv2.LINE_AA)
 
             # Display the image
-            cv2.imshow(channel_name + " Viewer", frame_overlay)
+            cv2.imshow(channel_name + " Viewer", frame)
 
         k = cv2.waitKey(1)
         # Esc key to stop
