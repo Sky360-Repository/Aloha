@@ -156,7 +156,7 @@ def update_tracking(index):
             if len(slot) > 0:
                 slot = slot[0]
                 active_tracks[slot] = (next_id, cx, cy, w, h, 1, index)
-                next_id = 1 if next_id >= 9999 else next_id + 1 
+                next_id = 1 if next_id >= 9999 else next_id + 1
 
     # Prune dead tracks
     for i in range(MAX_OBJECTS):

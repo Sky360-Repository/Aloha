@@ -25,7 +25,7 @@ def listen_for_key():
 
 threading.Thread(target=listen_for_key, daemon=True).start()
 if debug: print(f"⏹️  Press ENTER to quit. ⏹️")
-    
+
 # Time formatting -------------------------------------------
 def format_timestamp_utc(ts: float) -> str:
     #Format a UNIX timestamp to a UTC time string with milliseconds
@@ -44,8 +44,8 @@ class RingBuffer:
         # Create shared memory block for metadata
         metadata_bytes = np.prod((self.buffer_size, 3)) * np.dtype(np.float64).itemsize
         self.shm2 = shared_memory.SharedMemory(create=True, size=metadata_bytes, name="metadata_ring_buffer")
-        self.metadata_buffer = np.ndarray((self.buffer_size, 3), dtype=np.float64, buffer=self.shm2.buf)        
-        
+        self.metadata_buffer = np.ndarray((self.buffer_size, 3), dtype=np.float64, buffer=self.shm2.buf)
+
         if debug: print(f"RingBuffer: successfully created ring buffers {self.frame_buffer.shape} and {self.metadata_buffer.shape} ✅")
 
     def export_to_hdf5(self, filepath: str):
@@ -59,7 +59,7 @@ class RingBuffer:
     def store_frame(self, img: np.ndarray, exposure: float, gain: float):
         self.frame_buffer[self.frame_index] = img
         self.metadata_buffer[self.frame_index] = [time.time(), exposure, gain]
-        
+
         if data_dump:
             # Writing the buffers into an HDF5 file for testing
             if self.frame_index == self.buffer_size - 1:
@@ -224,7 +224,7 @@ class QHYCameraController:
             pass
         except FileExistsError:
             pass
-            
+
         self.bpp = c_uint32(self.BITS_PER_PIXEL)
         self.channels = c_uint32(self.COLOR_CHANNELS)
         self.ring_buffer = RingBuffer(self.ROI_WIDTH, self.ROI_HEIGHT)  # Initialize RingBuffer
@@ -248,12 +248,12 @@ class QHYCameraController:
         # Loading SDK
         self.sdk = CDLL(sdk_path)
         self._set_function_signatures()
-        
+
         # Initialize the camera
         self.cam = None
         self.initialize_camera()
         self.set_exposure_and_gain()
-        
+
         # CV2 window
         #if debug:
         #    window_title = "Sky360 debug preview - <q> = quit"
@@ -389,7 +389,7 @@ class QHYCameraController:
             if debug: print(f"Initialization: successfully set exposure to {self.exposure} ✅")
         else:
             if debug: print(f"Initialization: failed to set exposure ❌")
-        
+
         ret = self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_GAIN, self.TARGET_GAIN)
         self.gain = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_GAIN)
         if (ret == 0):
@@ -489,7 +489,7 @@ class QHYCameraController:
                     else:
                         if debug: print(f"Calibration: failed to stop live mode ❌")
                     time.sleep(0.2)
-                    
+
                     ret = self.sdk.BeginQHYCCDLive(self.cam)
                     if (ret == 0):
                         if debug: print(f"Calibration: successfully began live mode ✅")
@@ -505,9 +505,9 @@ class QHYCameraController:
                 self.successes -= 1
                 if debug: print(f"Calibration: failed to fetch a live frame ❌")
                 ret = -1
-                
+
             time.sleep(delay)
-            
+
         return delay
 
     # Temperature control
@@ -560,7 +560,7 @@ class QHYCameraController:
             # Perform temperature control at intervals
             if (self.ring_buffer.frame_index == 11) or (self.ring_buffer.frame_index == 111):
                 self.control_temperature_pwm()
-            
+
             self.ring_buffer.frame_index = (self.ring_buffer.frame_index + 1) % self.ring_buffer.buffer_size  # Cycle index
             return img  # Return the processed frame
         return None
@@ -593,7 +593,7 @@ class QHYCameraController:
         # Close camera connection
         self.sdk.CloseQHYCCD(self.cam)
         time.sleep(2.0)
-        
+
         #cv2.destroyAllWindows()
         time.sleep(0.2)
 
@@ -610,7 +610,7 @@ if __name__ == "__main__":
     qhy_camera = QHYCameraController()
 
     print(f"Live: fetching live frames ...")
-    
+
     # Live loop
     while True:
         prev_time = time.perf_counter()
@@ -625,7 +625,7 @@ if __name__ == "__main__":
 
         if quit_requested:
             break
-        
+
         time.sleep(qhy_camera.delay)
 
     # Close

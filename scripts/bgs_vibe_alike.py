@@ -11,7 +11,7 @@ from multiprocessing import shared_memory
 import multiprocessing.resource_tracker as resource_tracker
 
 # SETTINGS
-LIVE_MODE = True # True is syncing with camera, False starts with SHMs 
+LIVE_MODE = True # True is syncing with camera, False starts with SHMs
 RING_SIZE = 200
 FULL_SHAPE = (3200, 3200)
 DOWNSAMPLE = 2
@@ -211,7 +211,7 @@ try:
         # Apply static mask and write final result to SHM
         final_mask[mask_small == 0] = 0
         mask_np[current_idx] = final_mask
-        
+
         """
         # Debugging
         fps = 1 / (time.perf_counter() - start_time)
@@ -231,7 +231,7 @@ try:
         # Displaying the BGS results
         frame_display = (frame.astype(np.float32) / 256).astype(np.uint8) # 8bit
         frame_rgb = cv2.cvtColor(frame_display, cv2.COLOR_BayerRG2RGB)
-        
+
         if stats:
             blended = cv2.addWeighted(frame_rgb, 0.3, var_heatmap, 0.7, 0)
         else:
@@ -261,7 +261,7 @@ try:
         elif key == ord('x'):
             SMOOTHING_DECAY -= 0.01
         """
-            
+
 
 except KeyboardInterrupt:
     print("Interrupted.")

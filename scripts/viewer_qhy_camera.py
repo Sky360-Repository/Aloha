@@ -159,8 +159,8 @@ def show_frame(index):
         cv2.putText(scaled_img_8bit, f"Exposure: {int(metadata_buffer[index][1])}us", (10, 85), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2, cv2.LINE_AA)
         cv2.putText(scaled_img_8bit, f"Gain: {metadata_buffer[index][2]:.2f}dB", (10, 115), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2, cv2.LINE_AA)
         if bgs_view:
-            cv2.putText(scaled_img_8bit, f"Mask pixels: {num_fg_pixels:.4f}%", (10, 145), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2, cv2.LINE_AA)        
-    
+            cv2.putText(scaled_img_8bit, f"Mask pixels: {num_fg_pixels:.4f}%", (10, 145), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2, cv2.LINE_AA)
+
     if adsb_view:
         aircraft_screen_coords.clear()
         cv2.circle(scaled_img_8bit, center, outer_radius, (0, 0, 128), 1, lineType=cv2.LINE_AA)
@@ -248,7 +248,7 @@ while True:
         print(f"BGS = {bgs_view}")
     elif key == ord('q'):
         break
-    
+
     time.sleep(0.05)
 
 # Cleanup
