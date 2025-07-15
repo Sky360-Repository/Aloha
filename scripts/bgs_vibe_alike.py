@@ -21,6 +21,7 @@ HISTORY_LEN = 16
 FG_HISTORY_LEN = 5
 MATCH_THRESHOLD = 800  # [0..32767]
 REQUIRED_MATCHES = 2
+USE_SMOOTHING = False
 SMOOTHING_DECAY = 0.9  # exponential smoothing factor
 update_toggle = True
 window_title = "Live BGS viewer - press 'q' to quit."
@@ -35,6 +36,14 @@ stats = False
 CAM_SHM_NAME = "cam_ring_buffer"
 META_SHM_NAME = "metadata_ring_buffer"
 meta_dtype = np.dtype([("timestamp", "f8"), ("exposure", "f8"), ("gain", "f8")])
+
+# Load and downscale the mask to match FRAME_SHAPE
+raw_mask = cv2.imread("mask.png", cv2.IMREAD_GRAYSCALE)
+if raw_mask is None:
+    raise RuntimeError("Could not load mask.png")
+# Convert to binary and downscale
+raw_mask = np.where(raw_mask == 0, 0, 1).astype(np.uint8)
+mask_small = cv2.resize(raw_mask, (FRAME_SHAPE[1], FRAME_SHAPE[0]), interpolation=cv2.INTER_NEAREST).astype(np.uint8)
 
 # TODO
 # adjust to current exposure and gain changes
@@ -53,13 +62,16 @@ def process_frame(curr_frame: np.ndarray,
                   match_threshold: int,
                   required_matches: int,
                   update_: bool,
-                  rand_indices: np.ndarray) -> (np.ndarray, np.ndarray):
+                  rand_indices: np.ndarray,
+                  mask: np.ndarray) -> (np.ndarray, np.ndarray):
     height, width = curr_frame.shape
     fg_mask = np.zeros((height, width), dtype=np.uint8)
     hist_len = history.shape[2]
 
     for y in prange(height):
         for x in range(width):
+            if mask[y, x] == 0:
+                continue  # skip masked-out pixels entirely
             px = curr_frame[y, x]
             match_count = 0
             min_val = 0
@@ -93,10 +105,12 @@ def process_frame(curr_frame: np.ndarray,
     return fg_mask, history
 
 @njit(parallel=True)
-def update_stable_mask(stable_fg_mask, vote_mask, decay):
+def update_stable_mask(stable_fg_mask, vote_mask, decay, mask):
     height, width = stable_fg_mask.shape
     for y in prange(height):
         for x in range(width):
+            if mask[y, x] == 0:
+                continue  # skip masked pixels
             stable_fg_mask[y, x] = decay * stable_fg_mask[y, x] + (1.0 - decay) * (vote_mask[y, x] / 255.0)
     return stable_fg_mask
 
@@ -138,9 +152,6 @@ for i, idx in enumerate(ordered_indices):
 if debug: print("History buffer: buffer initialized - start processing loop ...")
 prev_latest_idx = start_idx
 
-#cv2.namedWindow(window_title, cv2.WINDOW_NORMAL)
-#cv2.resizeWindow(window_title, FRAME_SHAPE[1], FRAME_SHAPE[0])
-
 try:
     while True:
         timestamps = meta_np["timestamp"]
@@ -161,19 +172,19 @@ try:
         if debug: print(f"current index: {current_idx}")
 
         start_time = time.perf_counter()
-        
-        # Create the pre-calculated random matrix for each frame (speeding up JIT)
+
+        # Precompute random update indices
         if debug: proc_time = time.perf_counter()
         rand_indices = np.random.randint(HISTORY_LEN, size=FRAME_SHAPE, dtype=np.uint8)
         if debug: print(f"random buffer creation: {(time.perf_counter() - proc_time):.4f}s")
-        
-        # BGS processing the frame (switching between random and min/max buffer pixel exchange)
+
+        # Background subtraction
         if debug: proc_time = time.perf_counter()
-        update_toggle = True if update_toggle == False else False
-        fg_mask, history = process_frame(frame, history, MATCH_THRESHOLD, REQUIRED_MATCHES, update_toggle, rand_indices)
+        update_toggle = not update_toggle
+        fg_mask, history = process_frame(frame, history, MATCH_THRESHOLD, REQUIRED_MATCHES, update_toggle, rand_indices, mask_small)
         if debug: print(f"BGS compute: {(time.perf_counter() - proc_time):.4f}s")
 
-        # Noise reduction
+        # Morphological noise reduction
         if debug: proc_time = time.perf_counter()
         if morph_open > 1:
             fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_OPEN, kernel_open)
@@ -181,18 +192,24 @@ try:
             fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_CLOSE, kernel_close)
         if debug: print(f"morphing compute: {(time.perf_counter() - proc_time):.4f}s")
 
-        # Smoothing the history buffer
+        # Temporal smoothing (optional)
         if debug: proc_time = time.perf_counter()
-        fg_mask_history.append(fg_mask.copy())
-        vote_mask = fg_mask.copy()
-        if len(fg_mask_history) == FG_HISTORY_LEN:
-            stacked = np.stack(fg_mask_history, axis=0)
-            vote_mask = (np.sum(stacked, axis=0) > (255 * FG_HISTORY_LEN // 2)).astype(np.uint8) * 255 # 8bit
-        stable_fg_mask = update_stable_mask(fg_mask, vote_mask, SMOOTHING_DECAY)
-        final_mask = (stable_fg_mask > 0.5).astype(np.uint8) * 255 # 8bit
+        if USE_SMOOTHING:
+            fg_mask_history.append(fg_mask.copy())
+            if len(fg_mask_history) == FG_HISTORY_LEN:
+                stacked = np.stack(fg_mask_history, axis=0)
+                vote_mask = (np.sum(stacked, axis=0) > (255 * FG_HISTORY_LEN // 2)).astype(np.uint8) * 255
+            else:
+                vote_mask = fg_mask.copy()
+            stable_fg_mask = update_stable_mask(fg_mask, vote_mask, SMOOTHING_DECAY, mask_small)
+            final_mask = (stable_fg_mask > 0.5).astype(np.uint8) * 255
+        else:
+            final_mask = fg_mask.copy()
+
         if debug: print(f"smoothing compute: {(time.perf_counter() - proc_time):.4f}s")
-        
-        # Writing final mask into SHM
+
+        # Apply static mask and write final result to SHM
+        final_mask[mask_small == 0] = 0
         mask_np[current_idx] = final_mask
         
         """
