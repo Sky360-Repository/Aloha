@@ -5,6 +5,7 @@
 # ************************************************************************
 
 import numpy as np
+import cv2
 from abc import ABC, abstractmethod
 
 from ecal_util.jpeg_compression import convert_byte_array_to_image
@@ -49,7 +50,7 @@ class QHY_ImageStrategy(ImageStrategy):
     def process_message(self, message):
         # Convert the raw image data back into an image
         frame = np.frombuffer(message.raw_image, dtype=np.uint16)
-        frame = frame.reshape((message.height, message.width, 3))
+        frame = frame.reshape((message.height, message.width, 1))
         debayered_img = cv2.cvtColor(frame, cv2.COLOR_BayerRG2RGB)
         self.rgb = debayered_img[::4, ::4]
         self.time_stamp = message.time_stamp
