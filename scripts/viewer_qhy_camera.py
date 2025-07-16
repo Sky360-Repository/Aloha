@@ -48,6 +48,48 @@ center = (VIEWER_WINDOW // 2, VIEWER_WINDOW // 2)
 outer_radius = VIEWER_WINDOW // 2
 inner_radius = int((90.0 / 160.0) * outer_radius)
 
+#plane_icon = cv2.imread("plane.png", cv2.IMREAD_UNCHANGED)
+PLANE_POLY = np.array([
+    [0.0, -30.0],    # nose tip
+    [6.0, -23.0],
+    [7.0, -10.0],
+    [37.0,  10.0],
+    [37.0,  19.0],
+    [6.0,  11.0],
+    [3.0,   34.0],
+    [13.0,   40.0],
+    [13.0,   47.0],
+    [0.0,   42.0],   # center tail end
+    [-13.0,   47.0],
+    [-13.0,   40.0],
+    [-3.0,  34.0],
+    [-6.0, 11.0],
+    [-37.0, 19.0],
+    [-37.0, 10.0],
+    [-7.0, -10.0],
+    [-6.0, -23.0],
+    [0.0, -30.0],    # close nose tip
+], dtype=np.float32)
+
+@njit
+def haversine_distance(lat1, lon1, lat2, lon2):
+    # Great-circle distance between two lat/lon points (in meters)
+    R = 6371000.0
+    φ1, λ1, φ2, λ2 = map(radians, [lat1, lon1, lat2, lon2])
+    dφ = φ2 - φ1
+    dλ = λ2 - λ1
+
+    a = sin(dφ / 2)**2 + cos(φ1) * cos(φ2) * sin(dλ / 2)**2
+    c = 2 * atan2(sqrt(a), sqrt(1 - a))
+    return R * c
+
+@njit
+def distance_3d(lat1, lon1, alt1, lat2, lon2, alt2):
+    # Compute 3D distance between observer and aircraft (meters)
+    ground_distance = haversine_distance(lat1, lon1, lat2, lon2)
+    delta_alt = alt2 - alt1  # usually alt2 is much higher
+    return sqrt(ground_distance**2 + delta_alt**2)
+
 @njit
 def geodetic_to_enu(lat, lon, alt, obs_lat, obs_lon, obs_alt):
     # Earth radius
@@ -84,6 +126,18 @@ def get_newest_index():
     newest = np.argmax(timestamps)
     return newest
 
+def draw_plane(img, center, angle_deg, color=(0, 0, 128), scale=1.0):
+    angle_rad = np.radians(angle_deg)
+    rot_mat = np.array([
+        [np.cos(angle_rad), -np.sin(angle_rad)],
+        [np.sin(angle_rad),  np.cos(angle_rad)]
+    ])
+    pts = PLANE_POLY * scale
+    rotated = pts @ rot_mat.T
+    translated = rotated + np.array(center)
+    pts_int = np.round(translated).astype(np.int32)
+    cv2.fillPoly(img, [pts_int], color)
+
 def show_frame(index):
     img = frame_buffer[index]
     debayered_img = cv2.cvtColor(img, cv2.COLOR_BayerRG2RGB)
@@ -117,22 +171,28 @@ def show_frame(index):
             for ac in aircraft_data.get("aircraft", []):
                 flight = ac.get("flight", "").strip()
                 gs = ac.get("gs", 0)
+                if gs is not None: gs *= 1.852 # in km/h
                 mag_heading = ac.get("track", 0)
                 lat = ac.get("lat")
                 lon = ac.get("lon")
-                alt = ac.get("alt_baro") or ac.get("alt_geom") or ac.get("alt")
+                alt = ac.get("alt_baro") or ac.get("alt_geom") or ac.get("alt") # in feet
+                if alt is not None: alt *= 0.3048 # in meter
                 if lat is None or lon is None or alt is None:
                     continue
                 if debug: print(f"lat={lat}, lon={lon}, alt={alt}")
+                dist = distance_3d(OBSERVER_LAT, OBSERVER_LON, OBSERVER_ALT, lat, lon, alt)
                 x, y, z = geodetic_to_enu(lat, lon, alt, OBSERVER_LAT, OBSERVER_LON, OBSERVER_ALT)
                 az, el = enu_to_az_el(x, y, z)
                 px, py = az_el_to_pixel(az, el, VIEWER_WINDOW, FOV, AZIMUTH_OFFSET_DEG)
                 if 0 <= px < VIEWER_WINDOW and 0 <= py < VIEWER_WINDOW:
-                    label = f"{flight}  alt:{int(alt)}m  gs:{int(gs)}kts  hdg:{int(mag_heading)}"
-                    aircraft_screen_coords.append((px, py, label))
-                for px, py, label in aircraft_screen_coords:
-                    cv2.drawMarker(scaled_img_8bit, (px, py), (255, 255, 0), markerType=cv2.MARKER_CROSS, markerSize=10, thickness=2)
-                    cv2.putText(scaled_img_8bit, label, (px + 8, py - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 0), 1, cv2.LINE_AA)
+                    label = f"{flight}\nalt:{int(alt)} m\ngs:{int(gs)} km/h\nhdg:{int(mag_heading)}\ndist:{(dist // 1000):.1f} km"
+                    aircraft_screen_coords.append((px, py, label, mag_heading))
+                for px, py, label, heading in aircraft_screen_coords:
+                    draw_plane(scaled_img_8bit, (px, py), heading - AZIMUTH_OFFSET_DEG, scale=0.25)
+                    # Split label into lines
+                    lines = label.split("\n")
+                    for i, line in enumerate(lines):
+                        cv2.putText(scaled_img_8bit, line, (px + 10, py + 20 + i * 15), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 0, 128), 1, cv2.LINE_AA)
 
         except Exception as e:
             print("Aircraft JSON read error:", e)
@@ -182,8 +242,10 @@ while True:
         print(f"ADSB = {adsb_view}")
     elif key == ord('i'):
         info_view = not info_view
+        print(f"INFO = {info_view}")
     elif key == ord('b'):
         bgs_view = not bgs_view
+        print(f"BGS = {bgs_view}")
     elif key == ord('q'):
         break
 

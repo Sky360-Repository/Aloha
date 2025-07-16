@@ -87,16 +87,25 @@ class AEController:
     COMPENSATION_FACTOR = 0.62 # [0..1] amout of brightness_error to be compensated - to prevent from overshooting
     SMOOTHING_ALPHA = 0.3
 
-    def __init__(self):
+    def __init__(self, mask=None):
         self.smoothed_dark_ratio = None
         self.smoothed_bright_ratio = None
         self.current_brightness = 0
         self.brightness_error = 0
         self.state = ""
+        self.mask = mask
 
     def update(self, exposure_us, gain, ring_buffer: RingBuffer):
         gray_img = (ring_buffer.frame_buffer[ring_buffer.frame_index] / 65535.0).astype(np.float32)[::4, ::4]
-        histogram = cv2.calcHist([gray_img], [0], None, [512], [0.0, 1.0]).flatten()
+        
+        if self.mask is not None:
+            mask_small = self.mask[::4, ::4]
+            valid_mask = (mask_small > 0)
+            histogram = cv2.calcHist([gray_img[valid_mask]], [0], None, [512], [0.0, 1.0]).flatten()
+        else:
+            histogram = cv2.calcHist([gray_img], [0], None, [512], [0.0, 1.0]).flatten()
+
+        #histogram = cv2.calcHist([gray_img], [0], None, [512], [0.0, 1.0]).flatten()
         histogram /= histogram.sum()
         cdf = np.clip(np.cumsum(histogram), 0.0, 1.0)
         dark_ratio = cdf[5]
@@ -196,7 +205,9 @@ class QHYCameraController:
     MAX_FRAME_GRABS = 10 # max number of successful frame grabs during calibration
     EXPOSURE_ADJUST_INTERVAL = 4 # Frequency of exposure/gain adjustments
 
-    # Buffer & Processing Parameters
+    MASK_PATH = "mask.png"
+
+    # Processing Parameters
     FRAME_SYNC_DELAY_STEP = -0.001  # Decreasing delay step with new frame grabs [seconds]
     FRAME_GRAB_PENALTY_SEC = 0.31  # Forced sleep in case of failed frame grab [seconds]
 
@@ -225,9 +236,14 @@ class QHYCameraController:
         self.h = c_uint32(self.ROI_HEIGHT)
         self.successes = 0
         self.consecutive_failures = 0
+        
+        # Reading the mask
+        self.mask = cv2.imread(self.MASK_PATH, cv2.IMREAD_GRAYSCALE)
+        if self.mask is None:
+            raise RuntimeError(f"Could not load mask from {self.MASK_PATH}")
 
         # Auto-exposure
-        self.ae_controller = AEController()
+        self.ae_controller = AEController(mask=self.mask)
 
         # Loading SDK
         self.sdk = CDLL(sdk_path)
@@ -515,6 +531,12 @@ class QHYCameraController:
         if (ret == 0):
             # Convert buffer to image
             img = np.frombuffer(self.temp_buffer, dtype=np.uint16).reshape((self.h.value, self.w.value))
+            
+            # Apply binary mask
+            if self.mask is not None:
+                img[self.mask == 0] = 0
+            
+            # Storing the data
             self.ring_buffer.store_frame(img, self.exposure, self.gain)
 
             # Auto-exposure correction at intervals
