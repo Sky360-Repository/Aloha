@@ -8,7 +8,7 @@ import numpy as np
 import cv2
 from abc import ABC, abstractmethod
 
-from ecal_util.jpeg_compression import convert_byte_array_to_image
+from .jpeg_compression import convert_byte_array_to_image
 
 
 # Define the interface for strategies

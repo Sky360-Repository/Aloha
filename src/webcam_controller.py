@@ -9,9 +9,23 @@ import multiprocessing as mp
 import cv2
 import argparse
 
+from ecal_lib.ecal_util.proto_receiver import ProtoReceiver
 from ecal_lib.ecal_util.proto_sender import ProtoSender
 from ecal_lib.ecal_util.jpeg_compression import convert_image_to_byte_array
 from ecal_lib.ecal_util.set_process_name import *
+
+CAMERA_ID = 0
+QHY_CHANNEL_NAME = "QHYCamera"
+MESSAGE_NAME = "web_camera_image"
+PROTO_FILE = "ecal_lib.proto_files.web_camera_image_pb2"
+
+STATUS_MESSAGE_NAME = "qhy_camera_status"
+STATUS_PROTO_FILE = "ecal_lib.proto_files.qhy_camera_status_pb2"
+QHY_STATUS_CHANNEL = "QHYCamera_status"
+
+PARAMS_MESSAGE_NAME = "qhy_camera_parameters"
+PARAMS_PROTO_FILE = "ecal_lib.proto_files.qhy_camera_parameters_pb2"
+QHY_PARAMS_CHANNEL = "QHYCamera_parameters"
 
 MAX_RESTART_ATTEMPTS = 3
 PULSE_TIMEOUT_SEC = 5
@@ -22,18 +36,18 @@ INIT_PULSE_TIMEOUT_SEC = 30
 # To record raw set JPEG_QUALITY = -1
 JPEG_QUALITY = 100
 
-def webcam2ecal(init_params, param_queue, status_queue):
+def webcam2ecal(param_queue, status_queue):
 
-    # Init Parameters
-    camera_id = init_params['camera_id']
-    channel_name = init_params['channel_name']
-    message_name = init_params['message_name']
-    proto_file = init_params['proto_file']
+    # Set process name
+    set_process_name(f"{QHY_CHANNEL_NAME} Broadcast")
 
-    cv2.namedWindow(channel_name + " Broadcast", cv2.WINDOW_NORMAL)
+    # Proto sender
+    proto_snd = ProtoSender(QHY_CHANNEL_NAME, MESSAGE_NAME, PROTO_FILE)
+
+    cv2.namedWindow(QHY_CHANNEL_NAME + " Broadcast", cv2.WINDOW_NORMAL)
 
     # Open the webcam
-    cap = cv2.VideoCapture(camera_id)
+    cap = cv2.VideoCapture(CAMERA_ID)
 
     # Resolution Problem
     # Windows sets default parameters that are high frame rate and low resolution
@@ -43,21 +57,14 @@ def webcam2ecal(init_params, param_queue, status_queue):
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
     cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
 
-    # Set process name
-    set_process_name(f"{channel_name} Broadcast")
-
-    # Proto sender
-    proto_snd = ProtoSender(channel_name, message_name, proto_file)
-
-    # Infinite loop (using ecal_core.ok() will enable us to shutdown
-    # the process from another application
+    # Infinite loop - main_controller kills the process if it has to terminate
     while True:
         # Capture frame-by-frame
         ret, frame = cap.read()
 
         # Check if frame is not empty
         if not ret:
-            print(f"Camera {camera_id} not available")
+            print(f"Camera {CAMERA_ID} not available")
             break
 
         # Access the protobuf type definition
@@ -72,7 +79,7 @@ def webcam2ecal(init_params, param_queue, status_queue):
             protobuf_message.jpeg_data = byte_array
             protobuf_message.jpeg_size = len(byte_array)
 
-        protobuf_message.sensor_id = camera_id
+        protobuf_message.sensor_id = CAMERA_ID
         protobuf_message.time_stamp = int(time.time() * 1.0e6)
 
         # Send the message to the topic this publisher was created for
@@ -81,52 +88,65 @@ def webcam2ecal(init_params, param_queue, status_queue):
         # send status message
         status_message = {
             'pulse_time': time.time(),
-            'brightness': cap.get(cv2.CAP_PROP_BRIGHTNESS)
+            'exposure': cap.get(cv2.CAP_PROP_EXPOSURE),
+            'gain': cap.get(cv2.CAP_PROP_GAIN),
+            'temperature': cap.get(cv2.CAP_PROP_TEMPERATURE )
         }
         status_queue.put(status_message)
 
-        #while not param_queue.empty():
-        #    config_message = param_queue.get()
-        #    cap.set(cv2.CAP_PROP_BRIGHTNESS,  config_message['brightness'])
+        # Maybe pass the not None check in the set function
+        while not param_queue.empty():
+            config_message = param_queue.get()
+            print(f"target_brightness = {config_message['target_brightness']};\n"
+                  f"target_gain : {config_message['target_gain']};\n"
+                  f"exposure_min : {config_message['exposure_min']};\n"
+                  f"exposure_max : {config_message['exposure_max']};\n"
+                  f"gain_min : {config_message['gain_min']};\n"
+                  f"gain_max : {config_message['gain_max']};\n"
+                  f"exposure_min_step : {config_message['exposure_min_step']};\n"
+                  f"gain_min_step : {config_message['gain_min_step']};\n"
+                  f"compensation_factor : {config_message['compensation_factor']};\n"
+                  f"target_temperature : {config_message['target_temperature']};")
 
         # Display the image
-        cv2.imshow(channel_name + " Broadcast", frame)
+        cv2.imshow(QHY_CHANNEL_NAME + " Broadcast", frame)
 
         # Esc key to stop
         k = cv2.waitKey(1) & 0xFF
         if k == 27:
-            print(f"[webcam2ecal] Blocked ...")
+            print(f"[webcam2ecal] QHY crashed ...")
             while True:
                 time.sleep(1)
 
-    # When everything done, release the capture
+    # Close the capture and close window
     cv2.destroyAllWindows()
-
-    # When everything done, release the capture
     cap.release()
 
-def webcam_controller(camera_id, channel_name, message_name, proto_file):
+def webcam_controller():
     param_queue = mp.Queue()
     status_queue = mp.Queue()
     restart_attempts = 0
 
-    # init parameters
-    init_params = {
-        'camera_id': camera_id,
-        'channel_name': channel_name,
-        'message_name': message_name,
-        'proto_file': proto_file
-    }
+    # Set process name
+    set_process_name(f"{QHY_CHANNEL_NAME} Broadcast")
+
+    # Proto sender
+    status_proto_snd = ProtoSender(QHY_STATUS_CHANNEL, STATUS_MESSAGE_NAME, STATUS_PROTO_FILE)
+
+    # Proto receiver
+    params_proto_rec = ProtoReceiver(QHY_PARAMS_CHANNEL, PARAMS_MESSAGE_NAME, PARAMS_PROTO_FILE)
 
     def start_capture():
-        print("[Controller] start_capture")
-        proc = mp.Process(target=webcam2ecal, args=(init_params, param_queue, status_queue))
+        print("[Controller] Start QHY Camera")
+        proc = mp.Process(target=webcam2ecal, args=(param_queue, status_queue))
         proc.start()
         return proc
 
     capture_proc = start_capture()
 
-    # param_queue.put(camera_params)
+    is_reset_qyc_set = False
+    is_close_qyc_set = False
+
     last_pulse_time = time.time()
     # initial pulse timeout in seconds
     pulse_timeout = INIT_PULSE_TIMEOUT_SEC
@@ -135,69 +155,79 @@ def webcam_controller(camera_id, channel_name, message_name, proto_file):
             # Get status message
             while not status_queue.empty():
                 status_message = status_queue.get()
-                # publish_status_through_ecal()
+
+                # Access the protobuf type definition
+                status_proto_message = status_proto_snd.message
+                status_proto_message.temperature = status_message['temperature']
+                status_proto_message.gain = status_message['gain']
+                status_proto_message.exposure = status_message['exposure']
+                status_proto_message.is_qhy_live = True
+                status_proto_message.time_stamp = int(status_message['pulse_time'] * 1.0e6)
+
+                # Send the message to the topic this publisher was created for
+                status_proto_snd.send(status_proto_message)
+
                 last_pulse_time = status_message['pulse_time']
                 pulse_timeout = PULSE_TIMEOUT_SEC
                 restart_attempts = 0
 
-            #if get_param_from_ecal:
-            #    param_queue.put(updated_config)
-            print(f"[Controller] {time.time() - last_pulse_time} > {pulse_timeout}")
+            # Receiver from eCAL
+            if params_proto_rec.wait_for_message(100):
+                params_proto_message = params_proto_rec.message
+                config_message = {
+                    'target_brightness': params_proto_message.target_brightness,
+                    'target_gain': params_proto_message.target_gain,
+                    'exposure_min': params_proto_message.exposure_min,
+                    'exposure_max': params_proto_message.exposure_max,
+                    'gain_min': params_proto_message.gain_min,
+                    'gain_max': params_proto_message.gain_max,
+                    'exposure_min_step': params_proto_message.exposure_min_step,
+                    'gain_min_step': params_proto_message.gain_min_step,
+                    'compensation_factor': params_proto_message.compensation_factor,
+                    'target_temperature': params_proto_message.target_temperature
+                }
+                param_queue.put(config_message)
+                is_reset_qyc_set = params_proto_message.reset_qhy
+                is_close_qyc_set = params_proto_message.close_qhy
 
             # Pulse timeout check
-            if time.time() - last_pulse_time > pulse_timeout:
+            if is_reset_qyc_set or time.time() - last_pulse_time > pulse_timeout:
                 print(f"[Controller] No pulse for {pulse_timeout} sec — restarting Capture")
+
+                # Send the message to the topic
+                status_proto_message = status_proto_snd.message
+                status_proto_message.is_qhy_live = False
+                status_proto_message.time_stamp = int(time.time() * 1.0e6)
+                status_proto_snd.send(status_proto_message)
+
                 capture_proc.terminate()
                 capture_proc.join()
 
                 restart_attempts += 1
                 if restart_attempts >= MAX_RESTART_ATTEMPTS:
-                    print("[Controller] Max restart attempts reached — manual intervention required")
+                    print("[Controller] Max restart attempts reached — check QHY Camera")
                     break
 
                 capture_proc = start_capture()
                 last_pulse_time = time.time()
                 pulse_timeout = INIT_PULSE_TIMEOUT_SEC
-                # Remove: this parameter is to test restart attempts
-                init_params['camera_id'] = 9
+                is_reset_qyc_set = False
+
+            if is_close_qyc_set:
+                print(f"[Controller] Closing QHY")
+                capture_proc.terminate()
+                break
 
             time.sleep(1)
 
         except KeyboardInterrupt:
-            print("[Controller] Manual shutdown")
+            print("[Controller] Closing QHY")
             capture_proc.terminate()
             break
 
 if __name__ == "__main__":
 
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--channel_name", required=False,
-                    help="Specify the channel name: python webcam2ecal.py --channel_name camera_0")
-    ap.add_argument("--camera_id", required=False,
-                    help="Specify Camera ID: python webcam2ecal.py --camera_id 0")
-    ap.add_argument("--message_name", required=False,
-                    help="Specify the message_name: python webcam2ecal.py --message_name web_camera_image")
-    ap.add_argument("--proto_file", required=False,
-                    help="Specify proto_file: python webcam2ecal.py --proto_file proto_files.web_camera_image_pb2")
-    args = vars(ap.parse_args())
+    print("\n\npython webcam2ecal.py")
+    print("\n'ctrl+C' to stop\n")
 
-    # Default configurations
-    camera_id = 0
-    channel_name = "camera_" + str(camera_id)
-    message_name = "web_camera_image"
-    proto_file = "ecal_lib.proto_files.web_camera_image_pb2"
-
-    print("\n\nDefault usage: python webcam2ecal.py --camera_id 0 --channel_name camera_0 "
-          "--message_name web_camera_image --proto_file proto_files.web_camera_image_pb2")
-    print("\nPress 'Esc' key to stop\n")
-
-    if args["channel_name"]:
-        channel_name = args["channel_name"]
-    if args["camera_id"]:
-        camera_id = int(args["camera_id"])
-    if args["message_name"]:
-        message_name = args["message_name"]
-    if args["proto_file"]:
-        proto_file = args["proto_file"]
-
-    webcam_controller(camera_id, channel_name, message_name, proto_file)
+    webcam_controller()

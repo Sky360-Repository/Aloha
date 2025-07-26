@@ -1,0 +1,18 @@
+syntax = "proto2";
+
+package pb.sky;
+
+message qhy_camera_parameters {
+    optional float              target_brightness   =  1 [default = 0];
+    optional float              target_gain         =  2 [default = 0];
+    optional float              exposure_min        =  3 [default = 0];
+    optional float              exposure_max        =  4 [default = 0];
+    optional float              gain_min            =  5 [default = 0];
+    optional float              gain_max            =  6 [default = 0];
+    optional float              exposure_min_step   =  7 [default = 0];
+    optional float              gain_min_step       =  8 [default = 0];
+    optional float              compensation_factor =  9 [default = 0];
+    optional float              target_temperature  = 10 [default = 0];
+    required bool               close_qhy           = 11 [default = false];
+    required bool               reset_qhy           = 12 [default = false];
+}

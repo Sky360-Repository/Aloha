@@ -76,15 +76,6 @@ class RingBuffer:
 
 # AE Controller
 class AEController:
-    TARGET_GAIN = 22
-    EXPOSURE_MIN = 0
-    EXPOSURE_MAX = 110000
-    GAIN_MIN = 1.0
-    GAIN_MAX = 54.0
-    EXPOSURE_MIN_STEP = 50
-    GAIN_MIN_STEP = 0.2
-    TARGET_BRIGHTNESS = 0.5
-    COMPENSATION_FACTOR = 0.62 # [0..1] amout of brightness_error to be compensated - to prevent from overshooting
     SMOOTHING_ALPHA = 0.3
 
     def __init__(self, mask=None):
@@ -94,10 +85,19 @@ class AEController:
         self.brightness_error = 0
         self.state = ""
         self.mask = mask
+        self.target_gain = 22
+        self.exposure_min = 0
+        self.exposure_max = 110000
+        self.gain_min = 1.0
+        self.gain_max = 54.0
+        self.exposure_min_step = 50
+        self.gain_min_step = 0.2
+        self.target_brightness = 0.5
+        self.compensation_factor = 0.62 # [0..1] amout of brightness_error to be compensated - to prevent from overshooting
 
     def update(self, exposure_us, gain, ring_buffer: RingBuffer):
         gray_img = (ring_buffer.frame_buffer[ring_buffer.frame_index] / 65535.0).astype(np.float32)[::4, ::4]
-        
+
         if self.mask is not None:
             mask_small = self.mask[::4, ::4]
             valid_mask = (mask_small > 0)
@@ -121,55 +121,55 @@ class AEController:
 
         self.current_brightness = 0.5 * (1.0 - self.smoothed_dark_ratio) + 0.5 * self.smoothed_bright_ratio
 
-        if self.TARGET_BRIGHTNESS > 0:
-            self.brightness_error = np.round(np.log2(self.TARGET_BRIGHTNESS / self.current_brightness), 2) # avoids jiggering
+        if self.target_brightness > 0:
+            self.brightness_error = np.round(np.log2(self.target_brightness / self.current_brightness), 2) # avoids jiggering
         else:
             self.brightness_error = 0.0
 
         self.state = ""
         adjusted_gain = gain
 
-        if gain != self.TARGET_GAIN:
-            gain_error = self.COMPENSATION_FACTOR * self.brightness_error
+        if gain != self.target_gain:
+            gain_error = self.compensation_factor * self.brightness_error
             proposed_gain = gain * np.power(2, gain_error)
-            crosses_target = (gain - self.TARGET_GAIN) * (proposed_gain - self.TARGET_GAIN) < 0
-            narrows_target = abs(proposed_gain - self.TARGET_GAIN) < abs(gain - self.TARGET_GAIN) and (gain - self.TARGET_GAIN) * (proposed_gain - self.TARGET_GAIN) >= 0
+            crosses_target = (gain - self.target_gain) * (proposed_gain - self.target_gain) < 0
+            narrows_target = abs(proposed_gain - self.target_gain) < abs(gain - self.target_gain) and (gain - self.target_gain) * (proposed_gain - self.target_gain) >= 0
 
             if crosses_target:
-                adjusted_gain = self.TARGET_GAIN
-                adjusted_gain = np.clip(adjusted_gain, self.GAIN_MIN, self.GAIN_MAX)
+                adjusted_gain = self.target_gain
+                adjusted_gain = np.clip(adjusted_gain, self.gain_min, self.gain_max)
                 self.state += " | setting gain to target"
             elif narrows_target:
-                adjusted_gain = np.clip(proposed_gain, self.GAIN_MIN, self.GAIN_MAX)
+                adjusted_gain = np.clip(proposed_gain, self.gain_min, self.gain_max)
                 self.state += " | gain narrowing to sweet spot"
 
         gain_applied = np.log2(adjusted_gain / gain) if gain > 0 else 0.0
-        remain_error = self.COMPENSATION_FACTOR * self.brightness_error - gain_applied
+        remain_error = self.compensation_factor * self.brightness_error - gain_applied
         proposed_exposure = exposure_us * np.power(2, remain_error)
 
-        if proposed_exposure < self.EXPOSURE_MAX:
+        if proposed_exposure < self.exposure_max:
             adjusted_exposure = proposed_exposure
             self.state += " | adjusting exposure"
         else:
-            adjusted_exposure = self.EXPOSURE_MAX
+            adjusted_exposure = self.exposure_max
             self.state += " | setting exposure to max"
 
-        adjusted_exposure = np.clip(adjusted_exposure, self.EXPOSURE_MIN, self.EXPOSURE_MAX)
+        adjusted_exposure = np.clip(adjusted_exposure, self.exposure_min, self.exposure_max)
 
         exposure_applied = np.log2(adjusted_exposure / exposure_us) if exposure_us > 0 else 0.0
         leftover_error = remain_error - exposure_applied
         proposed_gain = adjusted_gain * np.power(2, leftover_error)
-        adjusted_gain = np.clip(proposed_gain, self.GAIN_MIN, self.GAIN_MAX)
+        adjusted_gain = np.clip(proposed_gain, self.gain_min, self.gain_max)
         self.state += " | adjusting gain for the rest"
 
-        if abs(adjusted_exposure - exposure_us) >= self.EXPOSURE_MIN_STEP:
+        if abs(adjusted_exposure - exposure_us) >= self.exposure_min_step:
             new_exposure = adjusted_exposure
             self.state += " | exposure update"
         else:
             new_exposure = exposure_us
             self.state += " | no update for exposure"
 
-        if abs(adjusted_gain - gain) >= self.GAIN_MIN_STEP:
+        if abs(adjusted_gain - gain) >= self.gain_min_step:
             new_gain = adjusted_gain
             self.state += " | gain update"
         else:
@@ -181,7 +181,6 @@ class AEController:
 
 class QHYCameraController:
     # Constants
-    TARGET_GAIN = 22 # initial gain
     TARGET_EXPOSURE = 30000 # [µs] initial exposure
     CONTROL_EXPOSURE = 8
     CONTROL_GAIN = 6
@@ -191,7 +190,6 @@ class QHYCameraController:
     CONTROL_CURPWM = 15
     CONTROL_MANULPWM = 16
     CONTROL_COOLER = 18
-    TARGET_TEMP = -20.0 # [°C]
     TEMPERATURE_TOLERANCE = 1.0 # [°C]
 
     ROI_WIDTH = ROI_HEIGHT = 3200 # squared ROI, centered to zenith
@@ -236,7 +234,8 @@ class QHYCameraController:
         self.h = c_uint32(self.ROI_HEIGHT)
         self.successes = 0
         self.consecutive_failures = 0
-        
+        self.target_temp = -20.0 # [°C]
+
         # Reading the mask
         self.mask = cv2.imread(self.MASK_PATH, cv2.IMREAD_GRAYSCALE)
         if self.mask is None:
@@ -390,7 +389,7 @@ class QHYCameraController:
         else:
             if debug: print(f"Initialization: failed to set exposure ❌")
 
-        ret = self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_GAIN, self.TARGET_GAIN)
+        ret = self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_GAIN, self.ae_controller.target_gain)
         self.gain = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_GAIN)
         if (ret == 0):
             if debug: print(f"Initialization: successfully set gain to {self.gain} ✅")
@@ -522,8 +521,8 @@ class QHYCameraController:
             current_temp = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_CURTEMP)
             current_pwm = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_CURPWM)
 
-        if abs(current_temp - self.TARGET_TEMP) > self.TEMPERATURE_TOLERANCE:
-            self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_COOLER, self.TARGET_TEMP)
+        if abs(current_temp - self.target_temp) > self.TEMPERATURE_TOLERANCE:
+            self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_COOLER, self.target_temp)
 
     def get_live_frame(self):
         ret = self.sdk.GetQHYCCDLiveFrame(self.cam, ctypes.byref(self.w), ctypes.byref(self.h), ctypes.byref(self.bpp), ctypes.byref(self.channels), self.temp_buffer)
@@ -531,11 +530,11 @@ class QHYCameraController:
         if (ret == 0):
             # Convert buffer to image
             img = np.frombuffer(self.temp_buffer, dtype=np.uint16).reshape((self.h.value, self.w.value))
-            
+
             # Apply binary mask
             if self.mask is not None:
                 img[self.mask == 0] = 0
-            
+
             # Storing the data
             self.ring_buffer.store_frame(img, self.exposure, self.gain)
 
@@ -565,8 +564,62 @@ class QHYCameraController:
             return img  # Return the processed frame
         return None
 
+
     def get_shape(self):
         return (self.h.value, self.w.value)
+
+
+    def get_exposure(self):
+        return self.exposure
+
+
+    def get_gain(self):
+        return self.gain
+
+
+    def get_temperature(self):
+        return self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_CURTEMP)
+
+
+    def set_target_brightness(self, target_brightness):
+        self.ae_controller.target_brightness = target_brightness
+
+
+    def set_target_gain(self, target_gain):
+        self.ae_controller.target_gain = target_gain
+
+
+    def set_exposure_min(self, exposure_min):
+        self.ae_controller.exposure_min = exposure_min
+
+
+    def set_exposure_max(self, exposure_max):
+        self.ae_controller.exposure_max = exposure_max
+
+
+    def set_gain_min(self, gain_min):
+        self.ae_controller.gain_min = gain_min
+
+
+    def set_gain_max(self, gain_max):
+        self.ae_controller.gain_max = gain_max
+
+
+    def set_exposure_min_step(self, exposure_min_step):
+        self.ae_controller.exposure_min_step = exposure_min_step
+
+
+    def set_gain_min_step(self, gain_min_step):
+        self.ae_controller.gain_min_step = gain_min_step
+
+
+    def set_compensation_factor(self, compensation_factor):
+        self.ae_controller.compensation_factor = compensation_factor
+
+
+    def set_target_temperature(self, target_temperature):
+        self.target_temp = target_temperature
+
 
     def close(self):
         # Stop live camera

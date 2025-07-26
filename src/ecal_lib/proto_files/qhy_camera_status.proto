@@ -1,0 +1,13 @@
+syntax = "proto2";
+
+package pb.sky;
+
+message qhy_camera_status {
+    optional float              temperature   = 1 [default = 0];
+    optional float              gain          = 2 [default = 0];
+    optional float              exposure      = 3 [default = 0];
+    required bool               is_qhy_live   = 4 [default = false];
+
+    // Time stamp
+    required int64              time_stamp    = 5;  /// [0,...,2**64] [10**-6*s] Time stamp value in microseconds
+}
