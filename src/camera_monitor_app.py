@@ -12,10 +12,10 @@ from ecal_lib.ecal_util.image_message import ImageMessage
 from ecal_lib.ecal_util.set_process_name import *
 
 QHY_CHANNEL_NAME = "QHYCamera"
-# MESSAGE_NAME = "web_camera_image"
-# PROTO_FILE = "ecal_lib.proto_files.web_camera_image_pb2"
-MESSAGE_NAME = "qhy_camera_image"
-PROTO_FILE = "ecal_lib.proto_files.qhy_camera_image_pb2"
+MESSAGE_NAME = "web_camera_image"
+PROTO_FILE = "ecal_lib.proto_files.web_camera_image_pb2"
+# MESSAGE_NAME = "qhy_camera_image"
+# PROTO_FILE = "ecal_lib.proto_files.qhy_camera_image_pb2"
 
 STATUS_MESSAGE_NAME = "qhy_camera_status"
 STATUS_PROTO_FILE = "ecal_lib.proto_files.qhy_camera_status_pb2"
@@ -73,21 +73,26 @@ class CameraMonitorApp:
         # Proto receiver
         self.status_proto_rec = ProtoReceiver(QHY_STATUS_CHANNEL, STATUS_MESSAGE_NAME, STATUS_PROTO_FILE)
 
+        # set multiprocessing to spawn
+        multiprocessing.set_start_method("spawn")
+
         self.root = root
         root.title("QHY Camera Monitor")
-        root.geometry("780x215")  # Set the starting size of the window
-        root.maxsize(780, 215)  # width x height
 
         # Create left and right frames
-        left_frame = tk.Frame(root, width=200, height=160)
-        left_frame.grid(row=0, column=0, padx=10, pady=5)
+        left_frame = tk.Frame(root)
+        left_frame.grid(row=0, column=0, padx=10, pady=5, sticky="nsew")
         self.left_frame = left_frame
 
-        right_frame = tk.Frame(root, width=150, height=160)
-        right_frame.grid(row=0, column=1, padx=10, pady=5)
+        right_frame = tk.Frame(root)
+        right_frame.grid(row=0, column=1, padx=10, pady=5, sticky="nsew")
 
-        msg_frame = tk.Frame(root, width=300,  height=10)
-        msg_frame.place(x=2,  y=185,  relx=0.01,  rely=0.01)
+        msg_frame = tk.Frame(root)
+        msg_frame.grid(row=1, column=0, columnspan=2, padx=10, pady=(0, 5), sticky="ew")
+
+        root.grid_rowconfigure(1, weight=0)
+        root.grid_columnconfigure(0, weight=1)
+        root.grid_columnconfigure(1, weight=1)
 
         # GUI elements
         self.timestamp_var = tk.DoubleVar(value=1000000000000000)

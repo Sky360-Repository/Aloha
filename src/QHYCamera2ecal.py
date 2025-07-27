@@ -89,6 +89,7 @@ def QHYCamera2ecal(param_queue, status_queue):
     qhy_camera.close()
 
 def main_controller():
+    mp.set_start_method("spawn")
     param_queue = mp.Queue()
     status_queue = mp.Queue()
     restart_attempts = 0
