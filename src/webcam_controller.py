@@ -123,6 +123,7 @@ def webcam2ecal(param_queue, status_queue):
     cap.release()
 
 def webcam_controller():
+    mp.set_start_method("spawn")
     param_queue = mp.Queue()
     status_queue = mp.Queue()
     restart_attempts = 0
