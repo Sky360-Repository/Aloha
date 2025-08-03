@@ -27,8 +27,8 @@ PARAMS_PROTO_FILE = "ecal_lib.proto_files.qhy_camera_parameters_pb2"
 QHY_PARAMS_CHANNEL = "QHYCamera_parameters"
 
 MAX_RESTART_ATTEMPTS = 3
-PULSE_TIMEOUT_SEC = 5
-INIT_PULSE_TIMEOUT_SEC = 30
+PULSE_TIMEOUT_SEC = 6
+INIT_PULSE_TIMEOUT_SEC = 35
 
 def QHYCamera2ecal(param_queue, status_queue):
 

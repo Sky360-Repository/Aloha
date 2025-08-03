@@ -190,7 +190,8 @@ class QHYCameraController:
     CONTROL_CURPWM = 15
     CONTROL_MANULPWM = 16
     CONTROL_COOLER = 18
-    TEMPERATURE_TOLERANCE = 1.0 # [°C]
+    TARGET_TEMPERATURE = -20.0 # [°C] added for transparency
+    TEMPERATURE_TOLERANCE = 1.0 # [°C] unused
 
     ROI_WIDTH = ROI_HEIGHT = 3200 # squared ROI, centered to zenith
     FPS_TARGET = 6 # target FPS
@@ -203,7 +204,7 @@ class QHYCameraController:
     MAX_FRAME_GRABS = 10 # max number of successful frame grabs during calibration
     EXPOSURE_ADJUST_INTERVAL = 4 # Frequency of exposure/gain adjustments
 
-    MASK_PATH = "mask.png"
+    MASK_PATH = "../scripts/mask.png"
 
     # Processing Parameters
     FRAME_SYNC_DELAY_STEP = -0.001  # Decreasing delay step with new frame grabs [seconds]
@@ -234,7 +235,8 @@ class QHYCameraController:
         self.h = c_uint32(self.ROI_HEIGHT)
         self.successes = 0
         self.consecutive_failures = 0
-        self.target_temp = -20.0 # [°C]
+        self.current_temp = 0.0
+        self.target_temp = self.TARGET_TEMPERATURE
 
         # Reading the mask
         self.mask = cv2.imread(self.MASK_PATH, cv2.IMREAD_GRAYSCALE)
@@ -511,17 +513,18 @@ class QHYCameraController:
 
     # Temperature control
     def control_temperature_pwm(self):
-        current_temp = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_CURTEMP)
-        current_pwm = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_CURPWM)
-        if debug: print(f"Cooling: T={current_temp}°C, PWM={(100 * current_pwm / 255):.1f}%")
+        self.current_temp = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_CURTEMP)
+        self.current_pwm = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_CURPWM)
+        if debug: print(f"Cooling: T={self.current_temp}°C, PWM={(100 * self.current_pwm / 255):.1f}%")
 
-        if current_temp < -100:
+        if self.current_temp < -100:
             if debug: print("Warning: Invalid temperature reading, retrying...")
             time.sleep(1.0)  # Blocking, consider logging instead
-            current_temp = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_CURTEMP)
-            current_pwm = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_CURPWM)
+            self.current_temp = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_CURTEMP)
+            self.current_pwm = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_CURPWM)
 
-        if abs(current_temp - self.target_temp) > self.TEMPERATURE_TOLERANCE:
+        #if abs(self.current_temp - self.target_temp) > self.TEMPERATURE_TOLERANCE: # using a simple ">=" is sufficient and stops even outside/below the tolerance
+        if self.current_temp >= self.target_temp:
             self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_COOLER, self.target_temp)
 
     def get_live_frame(self):
@@ -578,7 +581,8 @@ class QHYCameraController:
 
 
     def get_temperature(self):
-        return self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_CURTEMP)
+        #return self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_CURTEMP) # commented, because it calls too often, while current_temp is updated every 100 frames only
+        return self.current_temp
 
 
     def set_target_brightness(self, target_brightness):
