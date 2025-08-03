@@ -12,10 +12,10 @@ from ecal_lib.ecal_util.image_message import ImageMessage
 from ecal_lib.ecal_util.set_process_name import *
 
 QHY_CHANNEL_NAME = "QHYCamera"
-MESSAGE_NAME = "web_camera_image"
-PROTO_FILE = "ecal_lib.proto_files.web_camera_image_pb2"
-# MESSAGE_NAME = "qhy_camera_image"
-# PROTO_FILE = "ecal_lib.proto_files.qhy_camera_image_pb2"
+# MESSAGE_NAME = "web_camera_image"
+# PROTO_FILE = "ecal_lib.proto_files.web_camera_image_pb2"
+MESSAGE_NAME = "qhy_camera_image"
+PROTO_FILE = "ecal_lib.proto_files.qhy_camera_image_pb2"
 
 STATUS_MESSAGE_NAME = "qhy_camera_status"
 STATUS_PROTO_FILE = "ecal_lib.proto_files.qhy_camera_status_pb2"
@@ -117,13 +117,13 @@ class CameraMonitorApp:
         ttk.Label(left_frame, text="Timestamp:").grid(row=0, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Label(left_frame, textvariable=self.timestamp_var).grid(row=0, column=1, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
 
-        ttk.Label(left_frame, text="Temperature (°C):").grid(row=1, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Label(left_frame, text="Temperature [°C]:").grid(row=1, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Label(left_frame, textvariable=self.temp_var).grid(row=1, column=1, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
 
-        ttk.Label(left_frame, text="Gain:").grid(row=2, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Label(left_frame, text="Gain [dB]:").grid(row=2, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Label(left_frame, textvariable=self.gain_var).grid(row=2, column=1, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
 
-        ttk.Label(left_frame, text="exposure:").grid(row=3, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Label(left_frame, text="Exposure [µs]:").grid(row=3, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Label(left_frame, textvariable=self.exposure_var).grid(row=3, column=1, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
 
         ttk.Button(left_frame, text="Close QHY", command=self.close_qhy).grid(row=7, column=0)
@@ -167,9 +167,9 @@ class CameraMonitorApp:
         while self.running:
             if self.status_proto_rec.wait_for_message(100):
                 status_msg = self.status_proto_rec.message
-                self.temp_var.set(status_msg.temperature)
-                self.gain_var.set(status_msg.gain)
-                self.exposure_var.set(status_msg.exposure)
+                self.temp_var.set(f"{status_msg.temperature:.1f}") # reduced to 1 digit for readability
+                self.gain_var.set(f"{status_msg.gain:.2f}") # reduced to 2 digits for readability
+                self.exposure_var.set(int(status_msg.exposure)) # reduced to 0 digits for readability
                 if status_msg.is_qhy_live:
                     self.camera_msg.set("QHY is running")
                 else:
