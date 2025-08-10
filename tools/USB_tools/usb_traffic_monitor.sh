@@ -1,4 +1,4 @@
 #!/bin/bash
 
 sudo modprobe usbmon
-sudo usbtop --bus usbmon2
+sudo usbtop --bus usbmon8
