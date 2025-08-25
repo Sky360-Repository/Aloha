@@ -1,3 +1,137 @@
+# Issues with eCAL 6.0.0
+
+We are having a lot of issues with eCAL 6.0.0:
+ - We are not able to build the python binding on orange due to conflicts in the dependencies
+ - We will have to refactor our code because this version introduced a lot of changes to the API
+
+## Downgrading eCAL from 6.x to 5.x on Ubuntu
+
+This guide walks through the steps to safely remove eCAL 6.x, configure your system to prefer eCAL 5.x, and ensure future upgrades do not override the pinned version.
+
+## Step 1: Remove eCAL 6.x
+```bash
+sudo apt-get purge ecal libecal* python3-ecal
+```
+
+Removes core eCAL packages. If installed from source, manually delete any residual files in `/usr/local/lib` and `/usr/local/include`.
+
+##  Step 2: Remove Conflicting PPAs
+
+```bash
+sudo add-apt-repository --remove ppa:ecal/ecal
+sudo add-apt-repository --remove ppa:ecal/ecal-6.x
+```
+
+> Ensures apt won't pull newer 6.x versions.
+
+## Step 3: Add the Correct 5.x PPA
+
+```bash
+sudo add-apt-repository ppa:ecal/ecal-5
+sudo apt-get update
+```
+
+> Adds the stable 5.13.3 release stream.
+
+## Step 4: Pin eCAL to 5.13.3
+
+Create a preferences file:
+
+```bash
+sudo gedit /etc/apt/preferences.d/ecal
+```
+
+Paste the following content:
+
+```plaintext
+Package: ecal
+Pin: version 5.13.3
+Pin-Priority: 1001
+
+Package: libecal*
+Pin: version 5.13.3
+Pin-Priority: 1001
+
+Package: python3-ecal
+Pin: version 5.13.3
+Pin-Priority: 1001
+```
+
+> This forces apt to prefer 5.13.3 versions even if newer ones are available.
+
+---
+
+## Step 5: Install and Hold eCAL 5.13.3
+
+```bash
+sudo apt-get install ecal
+sudo apt-mark hold ecal libecal-core libecal-*.so python3-ecal
+```
+
+> Prevents future upgrades from pulling in 6.x packages.
+
+
+## Step 6: Verify Installed Version
+
+```bash
+ecal_core --version
+```
+
+> Should return a version like `v5.13.3`.
+
+
+## Optional Cleanup (if needed)
+
+### Remove eCAL and Related Packages
+
+```bash
+sudo apt-get purge 'libecal*' 'ecal*'
+```
+
+### Clean Up Residuals
+
+```bash
+sudo apt-get autoremove --purge
+sudo apt-get clean
+```
+
+### Double-Check Removal
+
+```bash
+dpkg -l | grep ecal
+which ecal_monitor
+```
+
+## Unpin eCAL (if reverting)
+
+### Remove the Pinning File
+
+```bash
+sudo rm /etc/apt/preferences.d/ecal
+```
+
+### Refresh Package Lists
+
+```bash
+sudo apt-get update
+```
+
+### Confirm Pinning Is Gone
+
+```bash
+apt-cache policy ecal
+```
+
+### Clear Cached `.deb` Files
+
+```bash
+sudo apt-get clean
+```
+
+## Notes
+- The next steps on this file were not updated, as they are still valid for ecal version 5.13.3 and python 3.12
+
+
 # eCAL Apps
 
 The .whl is a python binding to eCAL installation, so we need to install eCAL:
