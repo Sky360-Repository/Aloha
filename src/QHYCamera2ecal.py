@@ -43,6 +43,7 @@ def QHYCamera2ecal(param_queue, status_queue):
 
     # Infinite loop - main_controller kills the process if it has to terminate
     while True:
+        prev_time = time.perf_counter()
         # Capture frame-by-frame
         frame = qhy_camera.get_live_frame()
 
@@ -84,6 +85,13 @@ def QHYCamera2ecal(param_queue, status_queue):
             qhy_camera.set_gain_min_step(config_message['gain_min_step'])
             qhy_camera.set_compensation_factor(config_message['compensation_factor'])
             qhy_camera.set_target_temperature(config_message['target_temperature'])
+            
+        processing_time = time.perf_counter() - prev_time
+        delay = 1 / qhy_camera.FPS_TARGET - processing_time
+        if delay < 0: delay = 0
+        estimated_fps = 1 / (processing_time + delay)
+        print(f"Live: Index={qhy_camera.ring_buffer.frame_index}, Processing time={processing_time:.4f}s, Delay={delay:.4f}s, Estimated FPS={estimated_fps:.1f} ✅")
+        time.sleep(delay)
 
     # Close the capture
     qhy_camera.close()
