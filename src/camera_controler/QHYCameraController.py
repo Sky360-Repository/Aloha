@@ -88,7 +88,7 @@ class AEController:
         self.mask = mask
         self.target_gain = 22
         self.exposure_min = 0
-        self.exposure_max = 110000
+        self.exposure_max = 150000
         self.gain_min = 1.0
         self.gain_max = 54.0
         self.exposure_min_step = 50
@@ -107,10 +107,9 @@ class AEController:
         return out
 
     def update(self, exposure_us, gain, ring_buffer: RingBuffer):
-        AE_start_time = time.perf_counter()
-        #gray_img = (ring_buffer.frame_buffer[ring_buffer.frame_index] / 65535.0).astype(np.float32)[::4, ::4] # way too slow
+        #AE_start_time = time.perf_counter()
         gray_img = AEController.downsample_and_normalize(ring_buffer.frame_buffer[ring_buffer.frame_index])
-        if debug: print(f"compute for reading image from ring buffer and taking every 4th pixel in grey: {(time.perf_counter() - AE_start_time):.4f}s")
+        #if debug: print(f"compute for reading image from ring buffer and taking every 4th pixel in grey: {(time.perf_counter() - AE_start_time):.4f}s")
 
         # Histogram
         if self.mask is not None:
@@ -124,7 +123,7 @@ class AEController:
         cdf = np.clip(np.cumsum(histogram), 0.0, 1.0)
         dark_ratio = cdf[5]
         bright_ratio = 1.0 - cdf[507]
-        if debug: print(f"AE: dark_ratio={dark_ratio:.8f}, bright_ratio={bright_ratio:.8f}")
+        # if debug: print(f"AE: dark_ratio={dark_ratio:.8f}, bright_ratio={bright_ratio:.8f}")
 
         # Smoothing
         if self.smoothed_dark_ratio is None:
@@ -199,7 +198,7 @@ class AEController:
 
 class QHYCameraController:
     # Constants
-    TARGET_EXPOSURE = 30000 # [µs] initial exposure
+    TARGET_EXPOSURE = 70000 # [µs] initial exposure
     CONTROL_EXPOSURE = 8
     CONTROL_GAIN = 6
     CONTROL_TRANSFERBIT = 10
@@ -208,12 +207,12 @@ class QHYCameraController:
     CONTROL_CURPWM = 15
     CONTROL_MANULPWM = 16
     CONTROL_COOLER = 18
-    USB_SPEED = 0 # 0..automatic, range 0-60
+    USB_SPEED = 5 # [0..60]
     TARGET_TEMPERATURE = -20.0 # [°C] added for transparency
     TEMPERATURE_TOLERANCE = 1.0 # [°C] unused
 
     ROI_WIDTH = ROI_HEIGHT = 3200 # squared ROI, centered to zenith
-    FPS_TARGET = 6 # target FPS
+    FPS_TARGET = 5 # target FPS
     BITS_PER_PIXEL = 16  # Image depth (bit-depth)
     COLOR_CHANNELS = 1  # Number of image color channels (monochrome)
 
@@ -227,7 +226,7 @@ class QHYCameraController:
 
     # Processing Parameters
     FRAME_SYNC_DELAY_STEP = -0.001  # Decreasing delay step with new frame grabs [seconds]
-    FRAME_GRAB_PENALTY_SEC = 0.31  # Forced sleep in case of failed frame grab [seconds]
+    FRAME_GRAB_PENALTY_SEC = 1 / FPS_TARGET # Forced sleep in case of failed frame grab [seconds]
 
     def __init__(self, sdk_path='/usr/local/lib/libqhyccd.so'):
         # Clean up leftover shared memory -------------------------------------------
@@ -249,7 +248,6 @@ class QHYCameraController:
         self.x_offset = int((5544 - self.ROI_WIDTH) / 2) # [px]
         self.y_offset = int((3684 - self.ROI_HEIGHT) / 2) # [px]
         self.cycle = 1 / self.FPS_TARGET # [s]
-        #self.delay = max(self.MIN_DELAY_SEC, self.cycle - self.MIN_GRAB_TIME_SEC) # [s]
         self.delay = self.MIN_DELAY_SEC
         self.w = c_uint32(self.ROI_WIDTH)
         self.h = c_uint32(self.ROI_HEIGHT)
@@ -257,6 +255,9 @@ class QHYCameraController:
         self.consecutive_failures = 0
         self.current_temp = 0.0
         self.target_temp = self.TARGET_TEMPERATURE
+        self.cam_ready = True
+        self.frame_bytes = self.ROI_WIDTH * self.ROI_HEIGHT
+        self.temp_buffer = (ctypes.c_uint16 * self.frame_bytes)()
 
         # Reading the mask
         self.mask = cv2.imread(self.MASK_PATH, cv2.IMREAD_GRAYSCALE)
@@ -274,13 +275,6 @@ class QHYCameraController:
         self.cam = None
         self.initialize_camera()
         self.set_exposure_and_gain()
-
-        # CV2 window
-        #if debug:
-        #    window_title = "Sky360 debug preview - <q> = quit"
-        #    cv2.namedWindow(window_title, cv2.WINDOW_OPENGL)
-        #    cv2.resizeWindow(window_title, 800, 800)
-        #    print(f"Initialization: successfully opened CV2 window ✅")
 
         # Calibration
         self.get_single_frame()
@@ -325,6 +319,7 @@ class QHYCameraController:
 
     def initialize_camera(self):
         if debug: print(f"Initialisation: starting to initialize the camera")
+        
         # Resetting USB
         try:
             subprocess.check_call(["usbreset", "Q183-Cool"])
@@ -352,7 +347,7 @@ class QHYCameraController:
             if debug: print(f"Initialization: successfully opened camera {id_buffer.value.decode('utf-8').strip('\x00')} ✅")
         else:
             if debug: print(f"Initialization: failed to open camera ❌")
-        time.sleep(0.2)
+        time.sleep(0.5)
 
         # Setting 16-bit mode
         ret = self.sdk.SetQHYCCDBitsMode(self.cam, 16)
@@ -360,7 +355,7 @@ class QHYCameraController:
             if debug: print(f"Initialization: successfully set bits mode to 16 ✅")
         else:
             if debug: print(f"Initialization: failed to set bits mode ❌")
-        time.sleep(0.2)
+        time.sleep(0.5)
 
         # Setting transfer bit
         ret = self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_TRANSFERBIT, 16)
@@ -369,7 +364,7 @@ class QHYCameraController:
             if debug: print(f"Initialization: successfully set transfer bit to {tbit} ✅")
         else:
             if debug: print(f"Initialization: failed to set transfer bit ❌")
-        time.sleep(0.2)
+        time.sleep(0.5)
 
         # Setting resolution
         ret = self.sdk.SetQHYCCDResolution(
@@ -383,7 +378,7 @@ class QHYCameraController:
             if debug: print(f"Initialization: successfully set resolution to {self.x_offset}, {self.y_offset}, {self.ROI_WIDTH},{self.ROI_HEIGHT} ✅")
         else:
             if debug: print(f"Initialization: failed to set resolution ❌")
-        time.sleep(0.2)
+        time.sleep(0.5)
 
         # Setting USB traffic
         ret = self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_USBTRAFFIC, self.USB_SPEED)
@@ -391,7 +386,7 @@ class QHYCameraController:
             if debug: print(f"Initialization: successfully set USB traffic to {self.USB_SPEED} ✅")
         else:
             if debug: print(f"Initialization: failed to set USB traffic ❌")
-        time.sleep(0.2)
+        time.sleep(0.5)
 
         # Initializing camera
         ret = self.sdk.InitQHYCCD(self.cam)
@@ -417,7 +412,7 @@ class QHYCameraController:
             if debug: print(f"Initialization: successfully set gain to {self.gain} ✅")
         else:
             if debug: print(f"Initialization: failed to set gain ❌")
-        time.sleep(0.2)
+        time.sleep(0.5)
 
     def set_live_mode(self):
         if debug: print(f"Initialisation: setting live mode ...")
@@ -427,7 +422,7 @@ class QHYCameraController:
             if debug: print(f"Initialization: successfully set to live mode ✅")
         else:
             if debug: print(f"Initialization: failed to set live mode ❌")
-        time.sleep(0.2)
+        time.sleep(0.5)
 
         # Setting resolution
         ret = self.sdk.SetQHYCCDResolution(self.cam, c_uint(self.x_offset), c_uint(self.y_offset), c_uint(self.ROI_WIDTH), c_uint(self.ROI_HEIGHT))
@@ -435,7 +430,7 @@ class QHYCameraController:
             if debug: print(f"Initialization: successfully set resolution to {self.x_offset}, {self.y_offset}, {self.ROI_WIDTH},{self.ROI_HEIGHT} ✅")
         else:
             if debug: print(f"Initialization: failed to set resolution ❌")
-        time.sleep(0.2)
+        time.sleep(0.5)
 
         # Begin live
         ret = self.sdk.BeginQHYCCDLive(self.cam)
@@ -443,13 +438,13 @@ class QHYCameraController:
             if debug: print(f"Initialization: successfully began live mode ✅")
         else:
             if debug: print(f"Initialization: failed to begin live mode ❌")
-        time.sleep(0.2)
+        time.sleep(0.5)
 
     def get_single_frame(self):
         if debug: print(f"Calibration: fetching 3 single frames ...")
         # Temporary buffer for single frame retrieval
-        self.frame_bytes = self.ROI_WIDTH * self.ROI_HEIGHT
-        self.temp_buffer = (ctypes.c_uint16 * self.frame_bytes)()
+        #self.frame_bytes = self.ROI_WIDTH * self.ROI_HEIGHT
+        #self.temp_buffer = (ctypes.c_uint16 * self.frame_bytes)()
         for i in range(3):
             if debug: print(f"Calibration: exposing a single frame ...")
             ret = self.sdk.ExpQHYCCDSingleFrame(self.cam)
@@ -457,7 +452,8 @@ class QHYCameraController:
                 if debug: print(f"Calibration: successfully exposed a single frame ✅")
             else:
                 if debug: print(f"Calibration: failed to expose a single frame ❌")
-            time.sleep(0.1)
+                continue
+            time.sleep(0.5)
             ret = self.sdk.GetQHYCCDSingleFrame(self.cam, byref(self.w), byref(self.h),
                                                 byref(self.bpp), byref(self.channels), self.temp_buffer)
             if (ret == 0):
@@ -469,7 +465,7 @@ class QHYCameraController:
 
     def calibrate_camera(self):
         if debug: print(f"Calibration: fetching 10 live frames ...")
-        delay = self.MIN_DELAY_SEC
+        self.delay = self.MIN_DELAY_SEC
         self.successes = 0
         consecutive_failures = 0
         ret = -1
@@ -488,34 +484,20 @@ class QHYCameraController:
                 if debug: print(f"Calibration: successfully fetched a live frame, successes={self.successes} ✅")
             else:
                 consecutive_failures += 1
-                time.sleep(self.FRAME_GRAB_PENALTY_SEC)
+                time.sleep(abs(self.FRAME_GRAB_PENALTY_SEC - self.delay))
 
                 if consecutive_failures >= 5:
                     if debug: print(f"Calibration: 5 consecutive live frame grabs ❌")
-                    time.sleep(self.FRAME_GRAB_PENALTY_SEC * 5)
-
-                    # Stop & restart live camera to resync
-                    ret = self.sdk.StopQHYCCDLive(self.cam)
-                    if (ret == 0):
-                        if debug: print(f"Calibration: successfully stopped live mode ✅")
-                    else:
-                        if debug: print(f"Calibration: failed to stop live mode ❌")
-                    time.sleep(0.2)
-
-                    ret = self.sdk.BeginQHYCCDLive(self.cam)
-                    if (ret == 0):
-                        if debug: print(f"Calibration: successfully began live mode ✅")
-                    else:
-                        if debug: print(f"Calibration: failed to begin live mode ❌")
-                    time.sleep(0.2)
-
+                    time.sleep(abs(self.FRAME_GRAB_PENALTY_SEC - self.delay) * 5)
                     consecutive_failures = 0
 
                 self.successes -= 1
                 if debug: print(f"Calibration: failed to fetch a live frame ❌")
                 ret = -1
 
-        return delay
+            time.sleep(self.delay)
+            
+        return self.delay
 
     # Temperature control
     def control_temperature_pwm(self):
@@ -534,12 +516,14 @@ class QHYCameraController:
             self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_COOLER, self.target_temp)
 
     def get_live_frame(self):
+        self.cam_ready = False
+        #print(f"CAM: cam_ready is {self.cam_ready}")
         prev_time = time.perf_counter()
         ret = self.sdk.GetQHYCCDLiveFrame(self.cam, ctypes.byref(self.w), ctypes.byref(self.h), ctypes.byref(self.bpp), ctypes.byref(self.channels), self.temp_buffer)
         
         # Retry in case of unsuccessful data aquisition
         if (ret != 0):
-            time.sleep(0.001) # 1ms sleep before aquiring again
+            time.sleep(abs(self.FRAME_GRAB_PENALTY_SEC - self.delay)) # sleep before aquiring again
             if debug: print("retrying frame aquisition ...")
             ret = self.sdk.GetQHYCCDLiveFrame(self.cam, ctypes.byref(self.w), ctypes.byref(self.h), ctypes.byref(self.bpp), ctypes.byref(self.channels), self.temp_buffer)
         
@@ -555,7 +539,7 @@ class QHYCameraController:
             self.ring_buffer.store_frame(img, self.exposure, self.gain)
 
             # Auto-exposure correction at intervals
-            if (self.ring_buffer.frame_index % self.EXPOSURE_ADJUST_INTERVAL) == 0:
+            if (self.ring_buffer.frame_index % self.EXPOSURE_ADJUST_INTERVAL) == 0:         # and self.ring_buffer.frame_index != 0 ... to prevent AE control on the first frame
                 prev_exposure, prev_gain = self.exposure, self.gain
 
                 # Compute new exposure and gain using the ring buffer
@@ -574,15 +558,18 @@ class QHYCameraController:
 
             self.ring_buffer.frame_index = (self.ring_buffer.frame_index + 1) % self.ring_buffer.buffer_size  # Cycle index
             
-            # Delay estimation before the next is aquired to keep target_FPS
+            # Delay estimation before the next frame is aquired to keep target_FPS
             processing_time = time.perf_counter() - prev_time
-            delay = 1 / self.FPS_TARGET - processing_time
-            if delay < 0: delay = 0
-            estimated_fps = 1 / (processing_time + delay)
-            if debug: print(f"Live: Index={self.ring_buffer.frame_index}, Processing time={processing_time:.4f}s, Delay={delay:.4f}s, Estimated FPS={estimated_fps:.1f} ✅")
-            time.sleep(delay)
+            self.delay = 1 / self.FPS_TARGET - processing_time
+            if self.delay < 0: self.delay = 0
+            estimated_fps = 1 / (processing_time + self.delay)
+            if debug: print(f"Live: Index={self.ring_buffer.frame_index}, Processing time={processing_time:.4f}s, Delay={self.delay:.4f}s, Estimated FPS={estimated_fps:.1f} ✅")
             
+            time.sleep(self.delay)
+            self.cam_ready = True
+            #print(f"CAM: cam_ready is {self.cam_ready}")
             return img  # Return the processed frame
+            
         return None
 
 
@@ -691,20 +678,12 @@ if __name__ == "__main__":
         prev_time = time.perf_counter()
         img = qhy_camera.get_live_frame()
 
-        if img is not None:
-            #fps = 1 / (time.perf_counter() - prev_time)
-            processing_time = time.perf_counter() - prev_time
-            estimated_fps = 1 / (processing_time + qhy_camera.delay)
-            #if debug: 
-            print(f"Live: Index={qhy_camera.ring_buffer.frame_index}, Processing time={processing_time:.4f}s, Delay={qhy_camera.delay:.4f}s, Estimated FPS={estimated_fps:.1f} ✅")
-        else:
-            print(f"Live: Index={qhy_camera.ring_buffer.frame_index} not acquired ❌")
+        if img is None:
+            print(f"Live: Index={qhy_camera.ring_buffer.frame_index + 1} not acquired ❌")
 
         if quit_requested:
             break
-
-        time.sleep(qhy_camera.delay)
-
+        
     # Close
     qhy_camera.close()
 

@@ -43,47 +43,49 @@ def QHYCamera2ecal(param_queue, status_queue):
 
     # Infinite loop - main_controller kills the process if it has to terminate
     while True:
+        print(f"eCAL: cam_ready is {qhy_camera.cam_ready}")
         # Capture frame-by-frame
-        frame = qhy_camera.get_live_frame()
+        if qhy_camera.cam_ready == True:
+            frame = qhy_camera.get_live_frame()
 
-        # Check if frame is not empty
-        if frame is None:
-            print(f"Camera not available")
-            break
+            # Check if frame is not empty
+            if frame is None:
+                print(f"Camera not available")
+                break
 
-        # Access the protobuf type definition
-        protobuf_message = proto_snd.message
-        protobuf_message.width = qhy_camera.get_shape()[1]
-        protobuf_message.height = qhy_camera.get_shape()[0]
-        protobuf_message.bit_per_pixel = 16
-        protobuf_message.raw_image = frame.tobytes()
-        protobuf_message.time_stamp = int(time.time() * 1.0e6)
+            # Access the protobuf type definition
+            protobuf_message = proto_snd.message
+            protobuf_message.width = qhy_camera.get_shape()[1]
+            protobuf_message.height = qhy_camera.get_shape()[0]
+            protobuf_message.bit_per_pixel = 16
+            protobuf_message.raw_image = frame.tobytes()
+            protobuf_message.time_stamp = int(time.time() * 1.0e6)
 
-        # Send the message to the topic this publisher was created for
-        proto_snd.send(protobuf_message)
+            # Send the message to the topic this publisher was created for
+            proto_snd.send(protobuf_message)
 
-        # send status message
-        status_message = {
-            'pulse_time': time.time(),
-            'exposure': qhy_camera.get_exposure(),
-            'gain': qhy_camera.get_gain(),
-            'temperature': qhy_camera.get_temperature()
-        }
-        status_queue.put(status_message)
+            # send status message
+            status_message = {
+                'pulse_time': time.time(),
+                'exposure': qhy_camera.get_exposure(),
+                'gain': qhy_camera.get_gain(),
+                'temperature': qhy_camera.get_temperature()
+            }
+            status_queue.put(status_message)
 
-        # Maybe pass the not None check in the set function
-        while not param_queue.empty():
-            config_message = param_queue.get()
-            qhy_camera.set_target_brightness(config_message['target_brightness'])
-            qhy_camera.set_target_gain(config_message['target_gain'])
-            qhy_camera.set_exposure_min(config_message['exposure_min'])
-            qhy_camera.set_exposure_max(config_message['exposure_max'])
-            qhy_camera.set_gain_min(config_message['gain_min'])
-            qhy_camera.set_gain_max(config_message['gain_max'])
-            qhy_camera.set_exposure_min_step(config_message['exposure_min_step'])
-            qhy_camera.set_gain_min_step(config_message['gain_min_step'])
-            qhy_camera.set_compensation_factor(config_message['compensation_factor'])
-            qhy_camera.set_target_temperature(config_message['target_temperature'])
+            # Maybe pass the not None check in the set function
+            while not param_queue.empty():
+                config_message = param_queue.get()
+                qhy_camera.set_target_brightness(config_message['target_brightness'])
+                qhy_camera.set_target_gain(config_message['target_gain'])
+                qhy_camera.set_exposure_min(config_message['exposure_min'])
+                qhy_camera.set_exposure_max(config_message['exposure_max'])
+                qhy_camera.set_gain_min(config_message['gain_min'])
+                qhy_camera.set_gain_max(config_message['gain_max'])
+                qhy_camera.set_exposure_min_step(config_message['exposure_min_step'])
+                qhy_camera.set_gain_min_step(config_message['gain_min_step'])
+                qhy_camera.set_compensation_factor(config_message['compensation_factor'])
+                qhy_camera.set_target_temperature(config_message['target_temperature'])
 
     # Close the capture
     qhy_camera.close()
