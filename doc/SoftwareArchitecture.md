@@ -51,7 +51,6 @@ And activate the environment:
 conda activate sky360
 ```
 
-
 # Development setup
 - Important tools
 

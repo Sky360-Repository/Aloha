@@ -18,6 +18,36 @@ If you encounter a bug or have a feature request, you can contribute by opening 
 4. In the issue description, provide as much detail as possible, including steps to reproduce the bug or a clear explanation of the requested feature.
 5. Submit the issue.
 
+## Quick Setup
+
+Please note that you need to have github account with a SSH key associated
+````
+ssh-keygen -o -t rsa -C "your_email@email.com"
+cd ~/.ssh/
+gedit id_rsa.pub
+````
+
+Copy the SSH key to your github account [https://github.com/settings/keys](https://github.com/settings/keys)
+
+Config git:
+```
+git config --global user.email your_email@email.com
+git config --global user.name your_name
+```
+
+You can now set your OrangePi5+ development environment using this setup script:
+
+```bash
+curl -O https://raw.githubusercontent.com/Sky360-Repository/Aloha/scripts/setup.sh
+
+source setup.sh
+```
+
+Check if development environment is up-to-date:
+```bash
+source scripts/diagnose_setup.sh
+```
+
 ## Info
 
 Please follow our documentation:
