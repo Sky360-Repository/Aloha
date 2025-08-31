@@ -19,7 +19,7 @@ FRAME_SHAPE = (FULL_SHAPE[0] // DOWNSAMPLE, FULL_SHAPE[1] // DOWNSAMPLE)
 PIXEL_SIZE = 2
 HISTORY_LEN = 16
 FG_HISTORY_LEN = 5
-MATCH_THRESHOLD = 800  # [0..32767]
+MATCH_THRESHOLD = 1600  # [0..32767]
 REQUIRED_MATCHES = 2
 USE_SMOOTHING = False
 SMOOTHING_DECAY = 0.9  # exponential smoothing factor
@@ -29,7 +29,7 @@ morph_open = 3
 morph_close = 3
 
 # Debugging
-debug = True
+debug = False
 stats = False
 
 # SHM
@@ -150,7 +150,21 @@ for i, idx in enumerate(ordered_indices):
     history[:, :, i] = image_np[idx]
 
 if debug: print("History buffer: buffer initialized - start processing loop ...")
+
 prev_latest_idx = start_idx
+var_threshold = MATCH_THRESHOLD
+num_fg_pixels = 0.0
+
+# TODO: extend/replace with morphology
+scales = [
+    (20.0, 1),
+    (10.0, 1),
+    (5.0, 1),
+    (1.0, 1),
+    (0.1, 1),
+    (0.01, 1),
+    (0.0, 1),
+]
 
 try:
     while True:
@@ -168,20 +182,23 @@ try:
 
         frame = image_np[current_idx]
         prev_latest_idx = current_idx
-
-        if debug: print(f"current index: {current_idx}")
-
         start_time = time.perf_counter()
 
         # Precompute random update indices
         if debug: proc_time = time.perf_counter()
         rand_indices = np.random.randint(HISTORY_LEN, size=FRAME_SHAPE, dtype=np.uint8)
         if debug: print(f"random buffer creation: {(time.perf_counter() - proc_time):.4f}s")
+        
+        # Dynamic MATCH_THRESHOLD depending on num_fg_pixels
+        for limit, factor in scales:
+            if num_fg_pixels > limit:
+                var_threshold = MATCH_THRESHOLD * factor
+                break
 
         # Background subtraction
         if debug: proc_time = time.perf_counter()
         update_toggle = not update_toggle
-        fg_mask, history = process_frame(frame, history, MATCH_THRESHOLD, REQUIRED_MATCHES, update_toggle, rand_indices, mask_small)
+        fg_mask, history = process_frame(frame, history, var_threshold, REQUIRED_MATCHES, update_toggle, rand_indices, mask_small)
         if debug: print(f"BGS compute: {(time.perf_counter() - proc_time):.4f}s")
 
         # Morphological noise reduction
@@ -207,6 +224,9 @@ try:
             final_mask = fg_mask.copy()
 
         if debug: print(f"smoothing compute: {(time.perf_counter() - proc_time):.4f}s")
+        
+        num_fg_pixels = np.count_nonzero(final_mask) / final_mask.size * 100
+        print(f"BGS: Index={current_idx} Processing time={(time.perf_counter() - start_time):.4f}s Mask pixels={num_fg_pixels:.4f}% Threshold={int(var_threshold)}")
 
         # Apply static mask and write final result to SHM
         final_mask[mask_small == 0] = 0
