@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+# set -e
 
 log() { echo -e "\033[1;34m[CHECK]\033[0m $1"; }
 warn() { echo -e "\033[1;33m[WARN]\033[0m $1"; }
@@ -74,28 +74,32 @@ check_opencv() {
 check_ecal_libs() {
   log "Checking eCAL installation..."
 
-  # Check if eCAL is installed via APT
-  if dpkg -s ecal &> /dev/null; then
-    installed_version=$(dpkg -s ecal | grep Version | awk '{print $2}')
+  # Check for eCAL 5.x via libecal-core
+  if dpkg -s libecal-core &> /dev/null; then
+    installed_version=$(dpkg -s libecal-core | grep Version | awk '{print $2}')
     if [[ "$installed_version" == "5.13.3" ]]; then
-      log "✅ eCAL installed via APT: version $installed_version"
+      log "✅ eCAL 5.x installed via APT: version $installed_version"
     else
-      warn "⚠️ eCAL installed via APT: version $installed_version (expected 5.13.3)"
+      warn "⚠️ eCAL 5.x installed via APT: version $installed_version (expected 5.13.3)"
     fi
+  # Check for eCAL 6.x via ecal package
+  elif dpkg -s ecal &> /dev/null; then
+    installed_version=$(dpkg -s ecal | grep Version | awk '{print $2}')
+    warn "⚠️ eCAL 6.x installed via APT: version $installed_version (expected 5.13.3)"
+
+  # Check for source install
+  elif ls /usr/local/lib | grep -q libecal_core; then
+    log "✅ eCAL core libraries found in /usr/local/lib (likely source install)"
+    version_hint=$(ecal_config --version | grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+')
+    if [[ "$version_hint" == "v5.13.3" ]]; then
+      log "✅ eCAL source version appears to be $version_hint"
+    else
+      warn "⚠️ eCAL source version appears to be $version_hint (expected v5.13.3)"
+    fi
+
+  # No eCAL detected
   else
-    # Check if eCAL is present in /usr/local/lib (source install)
-    if ls /usr/local/lib | grep -q libecal_core; then
-      log "✅ eCAL core libraries found in /usr/local/lib (likely source install)"
-      # Optional: try to extract version from binary strings
-      version_hint=$(ecal_config --version | grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+')
-      if [[ "$version_hint" == "5.13.3" ]]; then
-        log "✅ eCAL source version appears to be $version_hint"
-      else
-        warn "⚠️ eCAL source version appears to be $version_hint (expected 5.13.3)"
-      fi
-    else
-      fail "❌ eCAL not found via APT or in /usr/local/lib"
-    fi
+    fail "❌ eCAL not found via APT or in /usr/local/lib"
   fi
 }
 
