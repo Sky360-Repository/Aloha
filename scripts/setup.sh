@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+# set -e
 
 log() { echo -e "\033[1;34m[CHECK]\033[0m $1"; }
 warn() { echo -e "\033[1;33m[WARN]\033[0m $1"; }
@@ -106,20 +106,22 @@ install_conda() {
 purge_ecal() {
   log "🔧 Purging system-installed eCAL packages"
   sudo apt-get purge -y ecal libecal* python3-ecal || true
-  sudo apt-get purge -y 'libecal*' 'ecal*' || true
+  sudo dpkg --purge ecal || true
 
   log "🔧 Removing eCAL PPAs"
   sudo add-apt-repository --remove -y ppa:ecal/ecal || true
   sudo add-apt-repository --remove -y ppa:ecal/ecal-5.x || true
   sudo add-apt-repository --remove -y ppa:ecal/ecal-6.x || true
+  sudo add-apt-repository --remove -y ppa:ecal/ecal-latest || true
+  sudo add-apt-repository --remove -y ppa:ecal/ecal-5 || true
+
+  # Force remove lingering source files
+  sudo rm -f /etc/apt/sources.list.d/ecal-*.list
 
   log "🧹 Cleaning up orphaned packages"
   sudo apt-get autoremove --purge -y
   sudo apt-get clean
-
-  log "📦 Re-adding eCAL 5.x PPA for compatibility"
-  sudo add-apt-repository -y ppa:ecal/ecal-5
-  sudo apt-get update
+  sudo apt update
 }
 
 purge_ecal_source() {
@@ -146,8 +148,14 @@ purge_ecal_source() {
 build_ecal() {
   log "Building eCAL v5.13.3"
   cd ~/opt
-  git clone --recurse-submodules https://github.com/eclipse-ecal/ecal.git
+  log "Checking ecal repo presence..."
+  if [ -d "$HOME/opt/ecal" ]; then
+    log "✅ ecal repo found at ~/opt/ecal"
+  else
+    git clone --recurse-submodules https://github.com/eclipse-ecal/ecal.git
+  fi
   cd ecal
+  git reset --hard && git clean -dxf
   git fetch
   git checkout v5.13.3
   git submodule sync --recursive && git submodule update --init --recursive
@@ -217,23 +225,30 @@ main() {
   # Check if eCAL is installed via APT
   if dpkg -s libecal-core &> /dev/null; then
     installed_version=$(dpkg -s libecal-core | grep Version | awk '{print $2}')
-    if [[ "$installed_version" != "5.13.3" ]]; then
-      warn "⚠️ eCAL installed via APT: version $installed_version (expected 5.13.3)"
+    if [[ "$installed_version" == "5.13.3" ]]; then
+      log "✅ eCAL 5.x installed via APT: version $installed_version"
+    else
+      warn "⚠️ eCAL 5.x installed via APT: version $installed_version (expected 5.13.3)"
       purge_ecal
       build_ecal
-    else
-      log "✅ eCAL APT version is correct: $installed_version"
     fi
 
-  # Check if eCAL is installed from source
-  elif ls /usr/local/lib | grep -q libecal-core; then
-    version_hint=$(strings /usr/local/lib/libecal-core.so | grep -Eo '5\.[0-9]+\.[0-9]+' | head -n 1)
-    if [[ "$version_hint" != "5.13.3" ]]; then
-      warn "⚠️ eCAL source version appears to be $version_hint (expected 5.13.3)"
+  # Check for eCAL 6.x via ecal package
+  elif dpkg -s ecal &> /dev/null; then
+    installed_version=$(dpkg -s ecal | grep Version | awk '{print $2}')
+    warn "⚠️ eCAL 6.x installed via APT: version $installed_version (expected 5.13.3)"
+    purge_ecal
+    build_ecal
+
+  # Check for source install
+  elif ls /usr/local/lib | grep -q libecal_core; then
+    version_hint=$(ecal_config --version | grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+')
+    if [[ "$version_hint" == "v5.13.3" ]]; then
+      log "✅ eCAL source version appears to be correct: $version_hint"
+    else
+      warn "⚠️ eCAL source version appears to be $version_hint (expected v5.13.3)"
       purge_ecal_source
       build_ecal
-    else
-      log "✅ eCAL source version appears to be correct: $version_hint"
     fi
 
   # No eCAL detected
