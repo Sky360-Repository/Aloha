@@ -43,15 +43,11 @@ def QHYCamera2ecal(param_queue, status_queue):
 
     # Infinite loop - main_controller kills the process if it has to terminate
     while True:
-        print(f"eCAL: cam_ready is {qhy_camera.cam_ready}")
         # Capture frame-by-frame
-        if qhy_camera.cam_ready == True:
-            frame = qhy_camera.get_live_frame()
+        frame = qhy_camera.get_live_frame()
 
-            # Check if frame is not empty
-            if frame is None:
-                print(f"Camera not available")
-                break
+        # Check if frame is not empty
+        if frame is not None:
 
             # Access the protobuf type definition
             protobuf_message = proto_snd.message
@@ -85,7 +81,7 @@ def QHYCamera2ecal(param_queue, status_queue):
                 qhy_camera.set_exposure_min_step(config_message['exposure_min_step'])
                 qhy_camera.set_gain_min_step(config_message['gain_min_step'])
                 qhy_camera.set_compensation_factor(config_message['compensation_factor'])
-                qhy_camera.set_target_temperature(config_message['target_temperature'])
+                    qhy_camera.set_target_temperature(config_message['target_temperature'])
 
     # Close the capture
     qhy_camera.close()

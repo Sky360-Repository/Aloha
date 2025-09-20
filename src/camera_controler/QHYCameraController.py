@@ -255,7 +255,6 @@ class QHYCameraController:
         self.consecutive_failures = 0
         self.current_temp = 0.0
         self.target_temp = self.TARGET_TEMPERATURE
-        self.cam_ready = True
         self.frame_bytes = self.ROI_WIDTH * self.ROI_HEIGHT
         self.temp_buffer = (ctypes.c_uint16 * self.frame_bytes)()
 
@@ -516,62 +515,52 @@ class QHYCameraController:
             self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_COOLER, self.target_temp)
 
     def get_live_frame(self):
-        self.cam_ready = False
-        #print(f"CAM: cam_ready is {self.cam_ready}")
+        
+        ret = 0
         prev_time = time.perf_counter()
-        ret = self.sdk.GetQHYCCDLiveFrame(self.cam, ctypes.byref(self.w), ctypes.byref(self.h), ctypes.byref(self.bpp), ctypes.byref(self.channels), self.temp_buffer)
-        
-        # Retry in case of unsuccessful data aquisition
-        if (ret != 0):
-            time.sleep(abs(self.FRAME_GRAB_PENALTY_SEC - self.delay)) # sleep before aquiring again
-            if debug: print("retrying frame aquisition ...")
+        while ret == 0:
+            time.sleep(abs(self.FRAME_GRAB_PENALTY_SEC - self.delay)) # sleep before acquiring again
+            if debug: print("frame acquisition ...")
             ret = self.sdk.GetQHYCCDLiveFrame(self.cam, ctypes.byref(self.w), ctypes.byref(self.h), ctypes.byref(self.bpp), ctypes.byref(self.channels), self.temp_buffer)
+
+        # Convert buffer to image
+        img = np.frombuffer(self.temp_buffer, dtype=np.uint16).reshape((self.h.value, self.w.value))
+
+        # Apply binary mask
+        if self.mask is not None:
+            img[self.mask == 0] = 0
+
+        # Storing the data
+        self.ring_buffer.store_frame(img, self.exposure, self.gain)
+
+        # Auto-exposure correction at intervals
+        if (self.ring_buffer.frame_index % self.EXPOSURE_ADJUST_INTERVAL) == 0:         # and self.ring_buffer.frame_index != 0 ... to prevent AE control on the first frame
+            prev_exposure, prev_gain = self.exposure, self.gain
+
+            # Compute new exposure and gain using the ring buffer
+            self.exposure, self.gain = self.ae_controller.update(self.exposure, self.gain, self.ring_buffer)
+
+            # Apply changes if significant
+            if abs(self.exposure - prev_exposure) > 0:
+                self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_EXPOSURE, self.exposure)
+
+            if abs(self.gain - prev_gain) > 0:
+                self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_GAIN, self.gain)
+
+        # Perform temperature control at intervals
+        if (self.ring_buffer.frame_index == 11) or (self.ring_buffer.frame_index == 111):
+            self.control_temperature_pwm()
+
+        self.ring_buffer.frame_index = (self.ring_buffer.frame_index + 1) % self.ring_buffer.buffer_size  # Cycle index
+            
+        # Delay estimation before the next frame is acquired to keep target_FPS
+        processing_time = time.perf_counter() - prev_time
+        self.delay = 1 / self.FPS_TARGET - processing_time
+        if self.delay < 0: self.delay = 0
+        estimated_fps = 1 / (processing_time + self.delay)
+        if debug: print(f"Live: Index={self.ring_buffer.frame_index}, Processing time={processing_time:.4f}s, Delay={self.delay:.4f}s, Estimated FPS={estimated_fps:.1f} ✅")
         
-        if (ret == 0):
-            # Convert buffer to image
-            img = np.frombuffer(self.temp_buffer, dtype=np.uint16).reshape((self.h.value, self.w.value))
-
-            # Apply binary mask
-            if self.mask is not None:
-                img[self.mask == 0] = 0
-
-            # Storing the data
-            self.ring_buffer.store_frame(img, self.exposure, self.gain)
-
-            # Auto-exposure correction at intervals
-            if (self.ring_buffer.frame_index % self.EXPOSURE_ADJUST_INTERVAL) == 0:         # and self.ring_buffer.frame_index != 0 ... to prevent AE control on the first frame
-                prev_exposure, prev_gain = self.exposure, self.gain
-
-                # Compute new exposure and gain using the ring buffer
-                self.exposure, self.gain = self.ae_controller.update(self.exposure, self.gain, self.ring_buffer)
-
-                # Apply changes if significant
-                if abs(self.exposure - prev_exposure) > 0:
-                    self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_EXPOSURE, self.exposure)
-
-                if abs(self.gain - prev_gain) > 0:
-                    self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_GAIN, self.gain)
-
-            # Perform temperature control at intervals
-            if (self.ring_buffer.frame_index == 11) or (self.ring_buffer.frame_index == 111):
-                self.control_temperature_pwm()
-
-            self.ring_buffer.frame_index = (self.ring_buffer.frame_index + 1) % self.ring_buffer.buffer_size  # Cycle index
-            
-            # Delay estimation before the next frame is aquired to keep target_FPS
-            processing_time = time.perf_counter() - prev_time
-            self.delay = 1 / self.FPS_TARGET - processing_time
-            if self.delay < 0: self.delay = 0
-            estimated_fps = 1 / (processing_time + self.delay)
-            if debug: print(f"Live: Index={self.ring_buffer.frame_index}, Processing time={processing_time:.4f}s, Delay={self.delay:.4f}s, Estimated FPS={estimated_fps:.1f} ✅")
-            
-            time.sleep(self.delay)
-            self.cam_ready = True
-            #print(f"CAM: cam_ready is {self.cam_ready}")
-            return img  # Return the processed frame
-            
-        return None
-
+        return img  # Return the processed frame
 
     def get_shape(self):
         return (self.h.value, self.w.value)
