@@ -18,7 +18,7 @@ If you encounter a bug or have a feature request, you can contribute by opening 
 5. Submit the issue.
 
 ## Getting Started
-To start contributing to Sky360, please refer to the [Getting Started page](GettingStarted.md).
+To start contributing to Sky360, please refer to the [Getting Started page](./doc/GettingStarted.md).
 
 This page will walk you through
 - Hardware requirements
