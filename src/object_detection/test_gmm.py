@@ -121,8 +121,8 @@ if __name__ == "__main__":
     # Default configurations
     camera_id = 0
     is_color = True
-    nbr_gaussians = 13
-    learning_factor = 0.3
+    nbr_gaussians = 7
+    learning_factor = 0.1
 
     print("\n\nDefault usage: python test_gmm.py --camera_id 0 --nbr_gaussians 5 --learning_factor 0.5 --is_color True")
     print("\nPress 'Esc' key to stop\n")
