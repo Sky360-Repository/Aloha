@@ -86,15 +86,18 @@ class AEController:
         self.brightness_error = 0
         self.state = ""
         self.mask = mask
-        self.target_gain = 22
+        self.target_gain = 22 # optimal value in terms of efficiency
         self.exposure_min = 0
-        self.exposure_max = 150000
-        self.gain_min = 1.0
-        self.gain_max = 54.0
+        self.exposure_max = 200000
         self.exposure_min_step = 50
-        self.gain_min_step = 0.2
+        self.gain_min = 1.0
+        self.gain_max = 40.0
+        self.gain_min_step = 0.5
         self.target_brightness = 0.5
         self.compensation_factor = 0.62 # [0..1] amout of brightness_error to be compensated - to prevent from overshooting
+        self.histogram_sampling = 512
+        self.histogram_dark_point = 5
+        self.histogram_bright_point = 507
 
     @staticmethod
     @njit
@@ -115,14 +118,14 @@ class AEController:
         if self.mask is not None:
             mask_small = self.mask[::4, ::4]
             valid_mask = (mask_small > 0)
-            histogram = cv2.calcHist([gray_img[valid_mask]], [0], None, [512], [0.0, 1.0]).flatten()
+            histogram = cv2.calcHist([gray_img[valid_mask]], [0], None, [self.histogram_sampling], [0.0, 1.0]).flatten()
         else:
-            histogram = cv2.calcHist([gray_img], [0], None, [512], [0.0, 1.0]).flatten()
+            histogram = cv2.calcHist([gray_img], [0], None, [self.histogram_sampling], [0.0, 1.0]).flatten()
 
         histogram /= histogram.sum()
         cdf = np.clip(np.cumsum(histogram), 0.0, 1.0)
-        dark_ratio = cdf[5]
-        bright_ratio = 1.0 - cdf[507]
+        dark_ratio = cdf[self.histogram_dark_point]
+        bright_ratio = 1.0 - cdf[self.histogram_bright_point]
         # if debug: print(f"AE: dark_ratio={dark_ratio:.8f}, bright_ratio={bright_ratio:.8f}")
 
         # Smoothing
@@ -198,7 +201,7 @@ class AEController:
 
 class QHYCameraController:
     # Constants
-    TARGET_EXPOSURE = 70000 # [µs] initial exposure
+    ## SDK IDs
     CONTROL_EXPOSURE = 8
     CONTROL_GAIN = 6
     CONTROL_TRANSFERBIT = 10
@@ -207,26 +210,25 @@ class QHYCameraController:
     CONTROL_CURPWM = 15
     CONTROL_MANULPWM = 16
     CONTROL_COOLER = 18
-    USB_SPEED = 5 # [0..60]
-    TARGET_TEMPERATURE = -20.0 # [°C] added for transparency
-    TEMPERATURE_TOLERANCE = 1.0 # [°C] unused
-
-    ROI_WIDTH = ROI_HEIGHT = 3200 # squared ROI, centered to zenith
-    FPS_TARGET = 5 # target FPS
-    BITS_PER_PIXEL = 16  # Image depth (bit-depth)
-    COLOR_CHANNELS = 1  # Number of image color channels (monochrome)
-
-    MIN_DELAY_SEC = 0.03 # [s] floor for initial delay estimation
-    MIN_GRAB_TIME_SEC = 0.102 # [s] minimum grabbing estimate for first delay - deprecated
+    
+    ## FIXED Parameters
     RING_BUFFER_FRAMES = 200  # number of frames in ring buffer
-    MAX_FRAME_GRABS = 10 # max number of successful frame grabs during calibration
-    EXPOSURE_ADJUST_INTERVAL = 4 # Frequency of exposure/gain adjustments
-
+    ROI_WIDTH = ROI_HEIGHT = 3200 # squared ROI, centered to zenith
+    BITS_PER_PIXEL = 16  # image depth (bit-depth)
+    COLOR_CHANNELS = 1  # Number of image color channels (monochrome)
+    TARGET_TEMPERATURE = -20.0 # [°C]
+    
+    ## VARIABLE Parameters
     MASK_PATH = "../scripts/mask.png"
+    TARGET_EXPOSURE = 70000 # [µs] initial exposure
+    USB_SPEED = 6 # [0..60]
+    FPS_TARGET = 5 # target FPS
+    MIN_DELAY_SEC = 0.03 # [s] floor for initial delay estimation
+    MAX_FRAME_GRABS = 10 # max number of successful frame grabs during calibration
+    EXPOSURE_ADJUST_INTERVAL = 4 # frequency of exposure/gain adjustments
 
-    # Processing Parameters
-    FRAME_SYNC_DELAY_STEP = -0.001  # Decreasing delay step with new frame grabs [seconds]
-    FRAME_GRAB_PENALTY_SEC = 1 / FPS_TARGET # Forced sleep in case of failed frame grab [seconds]
+    ## Processing Parameters
+    FRAME_GRAB_PENALTY_SEC = 1 / FPS_TARGET # forced sleep in case of failed frame grab [seconds]
 
     def __init__(self, sdk_path='/usr/local/lib/libqhyccd.so'):
         # Clean up leftover shared memory -------------------------------------------
@@ -255,6 +257,7 @@ class QHYCameraController:
         self.consecutive_failures = 0
         self.current_temp = 0.0
         self.target_temp = self.TARGET_TEMPERATURE
+        self.cam_ready = True
         self.frame_bytes = self.ROI_WIDTH * self.ROI_HEIGHT
         self.temp_buffer = (ctypes.c_uint16 * self.frame_bytes)()
 
@@ -510,57 +513,66 @@ class QHYCameraController:
             self.current_temp = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_CURTEMP)
             self.current_pwm = self.sdk.GetQHYCCDParam(self.cam, self.CONTROL_CURPWM)
 
-        #if abs(self.current_temp - self.target_temp) > self.TEMPERATURE_TOLERANCE: # using a simple ">=" is sufficient and stops even outside/below the tolerance
         if self.current_temp >= self.target_temp:
             self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_COOLER, self.target_temp)
 
     def get_live_frame(self):
-        
-        ret = 0
+        self.cam_ready = False
+        #print(f"CAM: cam_ready is {self.cam_ready}")
         prev_time = time.perf_counter()
-        while ret == 0:
-            time.sleep(abs(self.FRAME_GRAB_PENALTY_SEC - self.delay)) # sleep before acquiring again
-            if debug: print("frame acquisition ...")
-            ret = self.sdk.GetQHYCCDLiveFrame(self.cam, ctypes.byref(self.w), ctypes.byref(self.h), ctypes.byref(self.bpp), ctypes.byref(self.channels), self.temp_buffer)
-
-        # Convert buffer to image
-        img = np.frombuffer(self.temp_buffer, dtype=np.uint16).reshape((self.h.value, self.w.value))
-
-        # Apply binary mask
-        if self.mask is not None:
-            img[self.mask == 0] = 0
-
-        # Storing the data
-        self.ring_buffer.store_frame(img, self.exposure, self.gain)
-
-        # Auto-exposure correction at intervals
-        if (self.ring_buffer.frame_index % self.EXPOSURE_ADJUST_INTERVAL) == 0:         # and self.ring_buffer.frame_index != 0 ... to prevent AE control on the first frame
-            prev_exposure, prev_gain = self.exposure, self.gain
-
-            # Compute new exposure and gain using the ring buffer
-            self.exposure, self.gain = self.ae_controller.update(self.exposure, self.gain, self.ring_buffer)
-
-            # Apply changes if significant
-            if abs(self.exposure - prev_exposure) > 0:
-                self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_EXPOSURE, self.exposure)
-
-            if abs(self.gain - prev_gain) > 0:
-                self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_GAIN, self.gain)
-
-        # Perform temperature control at intervals
-        if (self.ring_buffer.frame_index == 11) or (self.ring_buffer.frame_index == 111):
-            self.control_temperature_pwm()
-
-        self.ring_buffer.frame_index = (self.ring_buffer.frame_index + 1) % self.ring_buffer.buffer_size  # Cycle index
-            
-        # Delay estimation before the next frame is acquired to keep target_FPS
-        processing_time = time.perf_counter() - prev_time
-        self.delay = 1 / self.FPS_TARGET - processing_time
-        if self.delay < 0: self.delay = 0
-        estimated_fps = 1 / (processing_time + self.delay)
-        if debug: print(f"Live: Index={self.ring_buffer.frame_index}, Processing time={processing_time:.4f}s, Delay={self.delay:.4f}s, Estimated FPS={estimated_fps:.1f} ✅")
+        ret = self.sdk.GetQHYCCDLiveFrame(self.cam, ctypes.byref(self.w), ctypes.byref(self.h), ctypes.byref(self.bpp), ctypes.byref(self.channels), self.temp_buffer)
         
-        return img  # Return the processed frame
+        # Retry in case of unsuccessful data aquisition
+        if (ret != 0):
+            time.sleep(abs(self.FRAME_GRAB_PENALTY_SEC - self.delay)) # sleep before aquiring again
+            if debug: print("retrying frame aquisition ...")
+            ret = self.sdk.GetQHYCCDLiveFrame(self.cam, ctypes.byref(self.w), ctypes.byref(self.h), ctypes.byref(self.bpp), ctypes.byref(self.channels), self.temp_buffer)
+        
+        if (ret == 0):
+            # Convert buffer to image
+            img = np.frombuffer(self.temp_buffer, dtype=np.uint16).reshape((self.h.value, self.w.value))
+
+            # Apply binary mask
+            if self.mask is not None:
+                img[self.mask == 0] = 0
+
+            # Storing the data
+            self.ring_buffer.store_frame(img, self.exposure, self.gain)
+
+            # Auto-exposure correction at intervals
+            if (self.ring_buffer.frame_index % self.EXPOSURE_ADJUST_INTERVAL) == 0:         # and self.ring_buffer.frame_index != 0 ... to prevent AE control on the first frame
+                prev_exposure, prev_gain = self.exposure, self.gain
+
+                # Compute new exposure and gain using the ring buffer
+                self.exposure, self.gain = self.ae_controller.update(self.exposure, self.gain, self.ring_buffer)
+
+                # Apply changes if significant
+                if abs(self.exposure - prev_exposure) > 0:
+                    self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_EXPOSURE, self.exposure)
+
+                if abs(self.gain - prev_gain) > 0:
+                    self.sdk.SetQHYCCDParam(self.cam, self.CONTROL_GAIN, self.gain)
+
+            # Perform temperature control at intervals
+            if (self.ring_buffer.frame_index == 11) or (self.ring_buffer.frame_index == 111):
+                self.control_temperature_pwm()
+
+            self.ring_buffer.frame_index = (self.ring_buffer.frame_index + 1) % self.ring_buffer.buffer_size  # Cycle index
+            
+            # Delay estimation before the next frame is aquired to keep target_FPS
+            processing_time = time.perf_counter() - prev_time
+            self.delay = 1 / self.FPS_TARGET - processing_time
+            if self.delay < 0: self.delay = 0
+            estimated_fps = 1 / (processing_time + self.delay)
+            if debug: print(f"Live: Index={self.ring_buffer.frame_index}, Processing time={processing_time:.4f}s, Delay={self.delay:.4f}s, Estimated FPS={estimated_fps:.1f} ✅")
+            
+            time.sleep(self.delay)
+            self.cam_ready = True
+            #print(f"CAM: cam_ready is {self.cam_ready}")
+            return img  # Return the processed frame
+            
+        return None
+
 
     def get_shape(self):
         return (self.h.value, self.w.value)
@@ -617,7 +629,15 @@ class QHYCameraController:
 
     def set_target_temperature(self, target_temperature):
         self.target_temp = target_temperature
-
+    
+    def set_histogram_sampling(self, histogram_sampling):
+        self.histogram_sampling = histogram_sampling
+    
+    def set_histogram_dark_point(self, histogram_dark_point):
+        self.histogram_dark_point = histogram_dark_point
+    
+    def set_histogram_bright_point(self, histogram_bright_point):
+        self.histogram_bright_point = histogram_bright_point
 
     def close(self):
         # Stop live camera
@@ -664,11 +684,12 @@ if __name__ == "__main__":
 
     # Live loop
     while True:
-        prev_time = time.perf_counter()
+        #prev_time = time.perf_counter()
         img = qhy_camera.get_live_frame()
 
         if img is None:
-            print(f"Live: Index={qhy_camera.ring_buffer.frame_index + 1} not acquired ❌")
+            print(f"Live: Index={qhy_camera.ring_buffer.frame_index + 1} not acquired ❌ ... sleeping for {qhy_camera.delay:.4f}s")
+            time.sleep(qhy_camera.delay)
 
         if quit_requested:
             break

@@ -35,6 +35,9 @@ DEFAULT_EXPOSURE_MIN_STEP = 50
 DEFAULT_GAIN_MIN_STEP = 0.2
 DEFAULT_COMPENSATION_FACTOR = 0.62
 DEFAULT_TARGET_TEMPERATURE = -20.0 # [°C]
+DEFAULT_HISTOGRAM_SAMPLING = 512
+DEFAULT_HISTOGRAM_DARK_POINT = 5
+DEFAULT_HISTOGRAM_BRIGHT_POINT = 507
 
 def view_ecal_video():
     # Set process name
@@ -111,19 +114,19 @@ class CameraMonitorApp:
         self.gain_min_step_var = tk.DoubleVar(value=DEFAULT_GAIN_MIN_STEP)
         self.compensation_factor_var = tk.DoubleVar(value=DEFAULT_COMPENSATION_FACTOR)
         self.target_temperature_var  = tk.DoubleVar(value=DEFAULT_TARGET_TEMPERATURE)
+        self.histogram_sampling_var  = tk.DoubleVar(value=DEFAULT_HISTOGRAM_SAMPLING)
+        self.histogram_dark_point_var  = tk.DoubleVar(value=DEFAULT_HISTOGRAM_DARK_POINT)
+        self.histogram_bright_point_var  = tk.DoubleVar(value=DEFAULT_HISTOGRAM_BRIGHT_POINT)
 
         self.support_msg = tk.StringVar(value="")
         self.camera_msg = tk.StringVar(value="")
 
         ttk.Label(left_frame, text="Timestamp:").grid(row=0, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Label(left_frame, textvariable=self.timestamp_var).grid(row=0, column=1, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
-
         ttk.Label(left_frame, text="Temperature [°C]:").grid(row=1, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Label(left_frame, textvariable=self.temp_var).grid(row=1, column=1, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
-
         ttk.Label(left_frame, text="Gain [dB]:").grid(row=2, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Label(left_frame, textvariable=self.gain_var).grid(row=2, column=1, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
-
         ttk.Label(left_frame, text="Exposure [µs]:").grid(row=3, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Label(left_frame, textvariable=self.exposure_var).grid(row=3, column=1, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
 
@@ -132,28 +135,38 @@ class CameraMonitorApp:
         self.view_button = ttk.Button(left_frame, text="View QHY image", command=self.view_qhy_image)
         self.view_button.grid(row=8, column=0)
 
-        ttk.Label(right_frame, text="target_brightness:").grid(row=0, column=3, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
-        ttk.Entry(right_frame, textvariable=self.target_brightness_var).grid(row=0, column=4)
-        ttk.Label(right_frame, text="target_gain:").grid(row=1, column=3, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
-        ttk.Entry(right_frame, textvariable=self.target_gain_var).grid(row=1, column=4)
-        ttk.Label(right_frame, text="exposure_min:").grid(row=2, column=3, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
-        ttk.Entry(right_frame, textvariable=self.exposure_min_var).grid(row=2, column=4)
-        ttk.Label(right_frame, text="exposure_max:").grid(row=3, column=3, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
-        ttk.Entry(right_frame, textvariable=self.exposure_max_var).grid(row=3, column=4)
-        ttk.Label(right_frame, text="target_temperature:").grid(row=4, column=3, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
-        ttk.Entry(right_frame, textvariable=self.target_temperature_var).grid(row=4, column=4)
+        ttk.Label(right_frame, text="histogram_sampling:").grid(row=5, column=1, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Entry(right_frame, textvariable=self.histogram_sampling_var).grid(row=5, column=2)
 
-        ttk.Label(right_frame, text="gain_min:").grid(row=0, column=5, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
-        ttk.Entry(right_frame, textvariable=self.gain_min_var).grid(row=0, column=6)
-        ttk.Label(right_frame, text="gain_max:").grid(row=1, column=5, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
-        ttk.Entry(right_frame, textvariable=self.gain_max_var).grid(row=1, column=6)
+        ttk.Label(right_frame, text="target_brightness:").grid(row=0, column=1, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Entry(right_frame, textvariable=self.target_brightness_var).grid(row=0, column=2)
+        ttk.Label(right_frame, text="target_gain:").grid(row=1, column=1, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Entry(right_frame, textvariable=self.target_gain_var).grid(row=1, column=2)
+        ttk.Label(right_frame, text="exposure_min:").grid(row=2, column=1, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Entry(right_frame, textvariable=self.exposure_min_var).grid(row=2, column=2)
+        ttk.Label(right_frame, text="exposure_max:").grid(row=2, column=3, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Entry(right_frame, textvariable=self.exposure_max_var).grid(row=2, column=4)
+        ttk.Label(right_frame, text="target_temperature:").grid(row=0, column=3, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Entry(right_frame, textvariable=self.target_temperature_var).grid(row=0, column=4)
+        
+        ttk.Label(right_frame, text="histogram_dark_point:").grid(row=5, column=3, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Entry(right_frame, textvariable=self.histogram_dark_point_var).grid(row=5, column=4)
+
+        ttk.Label(right_frame, text="gain_min:").grid(row=3, column=1, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Entry(right_frame, textvariable=self.gain_min_var).grid(row=3, column=2)
+        ttk.Label(right_frame, text="gain_max:").grid(row=3, column=3, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Entry(right_frame, textvariable=self.gain_max_var).grid(row=3, column=4)
         ttk.Label(right_frame, text="exposure_min_step:").grid(row=2, column=5, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Entry(right_frame, textvariable=self.exposure_min_step_var).grid(row=2, column=6)
         ttk.Label(right_frame, text="gain_min_step:").grid(row=3, column=5, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Entry(right_frame, textvariable=self.gain_min_step_var).grid(row=3, column=6)
-        ttk.Label(right_frame, text="compensation_factor:").grid(row=4, column=5, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
-        ttk.Entry(right_frame, textvariable=self.compensation_factor_var).grid(row=4, column=6)
+        ttk.Label(right_frame, text="compensation_factor:").grid(row=1, column=3, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Entry(right_frame, textvariable=self.compensation_factor_var).grid(row=1, column=4)
         ttk.Button(right_frame, text="Apply Parameters", command=self.apply_parameters).grid(row=7, column=6)
+        
+        ttk.Label(right_frame, text="histogram_bright_point:").grid(row=5, column=5, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Entry(right_frame, textvariable=self.histogram_bright_point_var).grid(row=5, column=6)
+        
         ttk.Label(right_frame, textvariable=self.camera_msg).grid(row=9, column=6, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Label(msg_frame, textvariable=self.support_msg).grid(row=9, columnspan=6)
 
@@ -228,6 +241,9 @@ class CameraMonitorApp:
         params_message.gain_min_step = self.get_parameters(self.gain_min_step_var, 'gain_min_step', DEFAULT_GAIN_MIN_STEP)
         params_message.compensation_factor = self.get_parameters(self.compensation_factor_var, 'compensation_factor', DEFAULT_COMPENSATION_FACTOR)
         params_message.target_temperature = self.get_parameters(self.target_temperature_var, 'target_temperature', DEFAULT_TARGET_TEMPERATURE)
+        params_message.histogram_sampling = self.get_parameters(self.histogram_sampling_var, 'histogram_sampling', DEFAULT_HISTOGRAM_SAMPLING)
+        params_message.histogram_dark_point = self.get_parameters(self.histogram_dark_point_var, 'histogram_sampling', DEFAULT_HISTOGRAM_DARK_POINT)
+        params_message.histogram_bright_point = self.get_parameters(self.histogram_bright_point_var, 'histogram_sampling', DEFAULT_HISTOGRAM_BRIGHT_POINT)
         params_message.reset_qhy = False
         params_message.close_qhy = False
         self.params_proto_snd.send(params_message)

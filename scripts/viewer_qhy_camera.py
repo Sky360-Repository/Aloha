@@ -141,7 +141,7 @@ def draw_plane(img, center, angle_deg, color=(0, 0, 128), scale=1.0):
 def show_frame(index):
     img = frame_buffer[index]
     debayered_img = cv2.cvtColor(img, cv2.COLOR_BayerRG2RGB)
-    scaled_img = debayered_img[::4, ::4] # scaling down to VIEWER_WINDOW = 800
+    scaled_img = debayered_img[::1, ::1] # scaling down to VIEWER_WINDOW = 800
     scaled_img_8bit = cv2.convertScaleAbs(scaled_img, alpha=(255.0/65535.0)) # 8bit for overlays
 
     if bgs_view:
