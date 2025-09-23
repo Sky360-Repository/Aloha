@@ -157,13 +157,13 @@ num_fg_pixels = 0.0
 
 # TODO: extend/replace with morphology
 scales = [
-    (20.0, 1),
-    (10.0, 1),
-    (5.0, 1),
-    (1.0, 1),
-    (0.1, 1),
-    (0.01, 1),
-    (0.0, 1),
+    (20.0, 1, 5),
+    (10.0, 1, 5),
+    (5.0, 1, 3),
+    (1.0, 1, 3),
+    (0.1, 1, 1),
+    (0.01, 1, 1),
+    (0.0, 1, 1),
 ]
 
 try:
@@ -190,9 +190,11 @@ try:
         if debug: print(f"random buffer creation: {(time.perf_counter() - proc_time):.4f}s")
         
         # Dynamic MATCH_THRESHOLD depending on num_fg_pixels
-        for limit, factor in scales:
+        for limit, m_open, m_close in scales:
             if num_fg_pixels > limit:
-                var_threshold = MATCH_THRESHOLD * factor
+                #var_threshold = MATCH_THRESHOLD * factor
+                morph_open = m_open
+                morph_close = m_close
                 break
 
         # Background subtraction
