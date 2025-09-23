@@ -33,5 +33,5 @@ if __name__ == "__main__":
     if args["proto_file"]:
         proto_file = args["proto_file"]
 
-    recorder = EcalRecorder(channel_name, message_name, proto_file)
+    recorder = EcalRecorder(channel_name, message_name, proto_file, ecal_meas = '/emmc/ecal_meas/')
     recorder.start_recording()

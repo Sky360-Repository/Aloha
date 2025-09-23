@@ -33,11 +33,11 @@ if __name__ == "__main__":
 
     # ecal_core.ok() for a gracefully shutdown
     while ecal_core.ok():
-        if proto_rec.wait_for_message(100):
-            print("Message from {} at {} : {}".format(proto_rec.message.name,
-                                                      proto_rec.message.ip,
-                                                      proto_rec.message.msg))
+        received, message, _ = proto_rec.receive(100)
+        if received:
+            print("Message from {} at {} : {}".format(message.name,
+                                                      message.ip,
+                                                      message.msg))
 
-            if (proto_rec.message.ip == my_ip and
-                    (proto_rec.message.msg == 'q' or proto_rec.message.msg == 'Q')):
+            if (message.ip == my_ip and (message.msg == 'q' or message.msg == 'Q')):
                 break

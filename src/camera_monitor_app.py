@@ -12,8 +12,8 @@ from ecal_lib.ecal_util.image_message import ImageMessage
 from ecal_lib.ecal_util.set_process_name import *
 
 QHY_CHANNEL_NAME = "QHYCamera"
-# MESSAGE_NAME = "web_camera_image"
-# PROTO_FILE = "ecal_lib.proto_files.web_camera_image_pb2"
+#MESSAGE_NAME = "web_camera_image"
+#PROTO_FILE = "ecal_lib.proto_files.web_camera_image_pb2"
 MESSAGE_NAME = "qhy_camera_image"
 PROTO_FILE = "ecal_lib.proto_files.qhy_camera_image_pb2"
 
@@ -46,8 +46,9 @@ def view_ecal_video():
     cv2.namedWindow(QHY_CHANNEL_NAME + " Viewer", cv2.WINDOW_NORMAL)
 
     while True:
-        if proto_rec.wait_for_message(100):
-            image_msg.process_message(proto_rec.message)
+        received, proto_rec_message, _ = proto_rec.receive(100)
+        if received:
+            image_msg.process_message(proto_rec_message)
             frame = image_msg.get_rgb_image()
 
             # Display the image
@@ -165,8 +166,8 @@ class CameraMonitorApp:
 
     def status_listener(self):
         while self.running:
-            if self.status_proto_rec.wait_for_message(100):
-                status_msg = self.status_proto_rec.message
+            status_proto_received, status_msg, _ = self.status_proto_rec.receive(100)
+            if status_proto_received:
                 self.temp_var.set(f"{status_msg.temperature:.1f}") # reduced to 1 digit for readability
                 self.gain_var.set(f"{status_msg.gain:.2f}") # reduced to 2 digits for readability
                 self.exposure_var.set(int(status_msg.exposure)) # reduced to 0 digits for readability
@@ -179,14 +180,14 @@ class CameraMonitorApp:
 
     def reset_qhy(self):
         self.camera_msg.set("Resetting QHY")
-        params_message = self.params_proto_snd.message
+        params_message = self.params_proto_snd.get_message_type()
         params_message.close_qhy = False
         params_message.reset_qhy = True
         self.params_proto_snd.send(params_message)
 
     def close_qhy(self):
         self.camera_msg.set("Closing QHY")
-        params_message = self.params_proto_snd.message
+        params_message = self.params_proto_snd.get_message_type()
         params_message.close_qhy = True
         params_message.reset_qhy = False
         self.params_proto_snd.send(params_message)
@@ -216,7 +217,7 @@ class CameraMonitorApp:
         self.left_frame.after(500, self.check_process_status)
 
     def apply_parameters(self):
-        params_message = self.params_proto_snd.message
+        params_message = self.params_proto_snd.get_message_type()
         params_message.target_brightness = self.get_parameters(self.target_brightness_var, 'target_brightness', DEFAULT_TARGET_BRIGHTNESS)
         params_message.target_gain = self.get_parameters(self.target_gain_var, 'target_gain', DEFAULT_TARGET_GAIN)
         params_message.exposure_min = self.get_parameters(self.exposure_min_var, 'exposure_min', DEFAULT_EXPOSURE_MIN)

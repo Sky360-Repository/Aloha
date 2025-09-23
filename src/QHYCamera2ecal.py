@@ -50,7 +50,7 @@ def QHYCamera2ecal(param_queue, status_queue):
         if frame is not None:
 
             # Access the protobuf type definition
-            protobuf_message = proto_snd.message
+            protobuf_message = proto_snd.get_message_type()
             protobuf_message.width = qhy_camera.get_shape()[1]
             protobuf_message.height = qhy_camera.get_shape()[0]
             protobuf_message.bit_per_pixel = 16
@@ -81,7 +81,7 @@ def QHYCamera2ecal(param_queue, status_queue):
                 qhy_camera.set_exposure_min_step(config_message['exposure_min_step'])
                 qhy_camera.set_gain_min_step(config_message['gain_min_step'])
                 qhy_camera.set_compensation_factor(config_message['compensation_factor'])
-                    qhy_camera.set_target_temperature(config_message['target_temperature'])
+                qhy_camera.set_target_temperature(config_message['target_temperature'])
 
     # Close the capture
     qhy_camera.close()
@@ -122,7 +122,7 @@ def main_controller():
                 status_message = status_queue.get()
 
                 # Access the protobuf type definition
-                status_proto_message = status_proto_snd.message
+                status_proto_message = status_proto_snd.get_message_type()
                 status_proto_message.temperature = status_message['temperature']
                 status_proto_message.gain = status_message['gain']
                 status_proto_message.exposure = status_message['exposure']
@@ -137,8 +137,8 @@ def main_controller():
                 restart_attempts = 0
 
             # Receiver from eCAL
-            if params_proto_rec.wait_for_message(100):
-                params_proto_message = params_proto_rec.message
+            params_proto_received, params_proto_message, _ = params_proto_rec.receive(100)
+            if params_proto_received:
                 config_message = {
                     'target_brightness': params_proto_message.target_brightness,
                     'target_gain': params_proto_message.target_gain,
@@ -160,7 +160,7 @@ def main_controller():
                 print(f"[Controller] No pulse for {pulse_timeout} sec — restarting Capture")
 
                 # Send the message to the topic
-                status_proto_message = status_proto_snd.message
+                status_proto_message = status_proto_snd.get_message_type()
                 status_proto_message.is_qhy_live = False
                 status_proto_message.time_stamp = int(time.time() * 1.0e6)
                 status_proto_snd.send(status_proto_message)
