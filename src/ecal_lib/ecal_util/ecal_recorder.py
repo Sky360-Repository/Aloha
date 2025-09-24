@@ -30,11 +30,15 @@ class EcalRecorder:
         # Initialize proto receiver
         self.proto_rec = ProtoReceiver(self.channel_name, self.message_name, self.proto_file)
 
+        # Get message type for descriptor
+        message_type = self.proto_rec.get_proto(self.message_name, self.proto_file)
+        dummy_message = message_type()
+
         # Channel definition for HDF5
         self.channel = ecalhdf5.Channel(
             self.channel_name,
-            pb_helper.get_descriptor_from_type(self.proto_rec.message),
-            f"proto:{self.proto_rec.message.DESCRIPTOR.full_name}"
+            pb_helper.get_descriptor_from_type(dummy_message),
+            f"proto:{dummy_message.DESCRIPTOR.full_name}"
         )
 
         # Setup file
@@ -48,22 +52,23 @@ class EcalRecorder:
     def start_recording(self):
         print(f"Creating {self.output_dir}/{self.file_name}.hdf5 \n")
 
+        timeout_limit = 100
         count_timeout = 0
-        while True:
+
+        while count_timeout < timeout_limit:
             snd_time_stamp = int(time.time() * 1.0e6)
-            if self.proto_rec.wait_for_message(100):
+            received, message, rcv_time_stamp = self.proto_rec.receive(100)
+
+            if received:
                 count_timeout = 0
-                rcv_time_stamp = int(time.time() * 1.0e6)
                 self.meas.add_entry_to_file(
-                    self.proto_rec.message.SerializeToString(),
+                    message.SerializeToString(),
                     snd_time_stamp,
                     rcv_time_stamp,
                     self.channel_name
                 )
             else:
                 count_timeout += 1
-            if count_timeout == 100:
-                break
 
         if not self.meas.is_ok():
             print("Write error!")

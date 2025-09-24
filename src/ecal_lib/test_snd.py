@@ -38,7 +38,7 @@ if __name__ == "__main__":
         input_message = input("Type the message you want to send:")
 
         # Access the Message type definition
-        protobuf_message = proto_snd.message
+        protobuf_message = proto_snd.get_message_type()
         protobuf_message.name = name
         protobuf_message.ip = my_ip
         protobuf_message.msg = input_message

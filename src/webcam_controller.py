@@ -68,7 +68,7 @@ def webcam2ecal(param_queue, status_queue):
             break
 
         # Access the protobuf type definition
-        protobuf_message = proto_snd.message
+        protobuf_message = proto_snd.get_message_type()
         protobuf_message.width = frame.shape[1]
         protobuf_message.height = frame.shape[0]
         if JPEG_QUALITY == -1:
@@ -158,7 +158,7 @@ def webcam_controller():
                 status_message = status_queue.get()
 
                 # Access the protobuf type definition
-                status_proto_message = status_proto_snd.message
+                status_proto_message = status_proto_snd.get_message_type()
                 status_proto_message.temperature = status_message['temperature']
                 status_proto_message.gain = status_message['gain']
                 status_proto_message.exposure = status_message['exposure']
@@ -173,8 +173,8 @@ def webcam_controller():
                 restart_attempts = 0
 
             # Receiver from eCAL
-            if params_proto_rec.wait_for_message(100):
-                params_proto_message = params_proto_rec.message
+            params_proto_received, params_proto_message, _ = params_proto_rec.receive(100)
+            if params_proto_received:
                 config_message = {
                     'target_brightness': params_proto_message.target_brightness,
                     'target_gain': params_proto_message.target_gain,
@@ -196,7 +196,7 @@ def webcam_controller():
                 print(f"[Controller] No pulse for {pulse_timeout} sec — restarting Capture")
 
                 # Send the message to the topic
-                status_proto_message = status_proto_snd.message
+                status_proto_message = status_proto_snd.get_message_type()
                 status_proto_message.is_qhy_live = False
                 status_proto_message.time_stamp = int(time.time() * 1.0e6)
                 status_proto_snd.send(status_proto_message)

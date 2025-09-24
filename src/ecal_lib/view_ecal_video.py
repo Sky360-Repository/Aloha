@@ -26,8 +26,9 @@ def view_ecal_video(channel_name, message_name, proto_file):
     cv2.namedWindow(channel_name + " Viewer", cv2.WINDOW_NORMAL)
 
     while True:
-        if proto_rec.wait_for_message(100):
-            image_msg.process_message(proto_rec.message)
+        received, message, _ = proto_rec.receive(100)
+        if received:
+            image_msg.process_message(message)
             frame = image_msg.get_rgb_image()
 
             # # Overlay the time stamp

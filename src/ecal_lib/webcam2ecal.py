@@ -78,11 +78,12 @@ def webcam2ecal(camera_id, channel_name, message_name, proto_file):
             break
 
         # Access the protobuf type definition
-        protobuf_message = proto_snd.message
+        protobuf_message = proto_snd.get_message_type()
         protobuf_message.width = frame.shape[1]
         protobuf_message.height = frame.shape[0]
         if jpeg_quality == -1:
-            protobuf_message.raw_image = frame.tobytes()
+            raw_bytes = frame.tobytes()
+            protobuf_message.raw_image = raw_bytes
             protobuf_message.jpeg_size = 0
         else:
             byte_array = convert_image_to_byte_array(frame, jpeg_quality)

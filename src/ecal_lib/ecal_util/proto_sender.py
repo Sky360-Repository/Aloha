@@ -19,23 +19,22 @@ class ProtoSender:
     # - proto_file:   Path and filename of the proto buffer
     def __init__(self, channel_name, message_name, proto_file):
         self.message_name = message_name
+        self.proto_file = proto_file
         self.process_name = channel_name + "_Publisher"
         self.start()
-        self.publisher = None
-        self.ret = int()
-        self.message = self.start_publisher(channel_name, message_name, proto_file)()
-        self.message_was_sent = False
+        self.publisher = self.start_publisher(channel_name, message_name, proto_file)
 
     @staticmethod
     def get_proto(message_name, proto_file):
         proto = importlib.import_module(proto_file)
         return getattr(proto, message_name)
 
+    def get_message_type(self):
+        return self.get_proto(self.message_name, self.proto_file)()
+
     def start_publisher(self, channel_name, message_name, proto_file):
-        message = self.get_proto(message_name, proto_file)
-        self.publisher = ProtoPublisher(channel_name, message)
-        self.message_was_sent = False
-        return message
+        message_type = self.get_proto(message_name, proto_file)
+        return ProtoPublisher(channel_name, message_type)
 
     def start(self):
         ecal_core.initialize(sys.argv, self.process_name)
