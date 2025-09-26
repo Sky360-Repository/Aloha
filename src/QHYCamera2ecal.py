@@ -152,10 +152,10 @@ def main_controller():
                     'exposure_min_step': params_proto_message.exposure_min_step,
                     'gain_min_step': params_proto_message.gain_min_step,
                     'compensation_factor': params_proto_message.compensation_factor,
-                    'target_temperature': params_proto_message.target_temperature
-                    'histogram_sampling': params_proto_message.histogram_sampling
-                    'histogram_dark_point': params_proto_message.histogram_dark_point
-                    'histogram_bright_point': params_proto_message.histogram_bright_point
+                    'target_temperature': params_proto_message.target_temperature,
+                    'histogram_sampling': params_proto_message.histogram_sampling,
+                    'histogram_dark_point': params_proto_message.histogram_dark_point,
+                    'histogram_bright_point': params_proto_message.histogram_bright_point,
                 }
                 param_queue.put(config_message)
                 is_reset_qyc_set = params_proto_message.reset_qhy
