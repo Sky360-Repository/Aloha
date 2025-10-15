@@ -19,7 +19,7 @@ FRAME_SHAPE = (FULL_SHAPE[0] // DOWNSAMPLE, FULL_SHAPE[1] // DOWNSAMPLE)
 PIXEL_SIZE = 2
 HISTORY_LEN = 16
 FG_HISTORY_LEN = 5
-MATCH_THRESHOLD = 1600  # [0..32767]
+MATCH_THRESHOLD = 6400  # [0..32767]
 REQUIRED_MATCHES = 2
 USE_SMOOTHING = False
 SMOOTHING_DECAY = 0.9  # exponential smoothing factor
@@ -157,12 +157,12 @@ num_fg_pixels = 0.0
 
 # TODO: extend/replace with morphology
 scales = [
-    (20.0, 1, 5),
-    (10.0, 1, 5),
-    (5.0, 1, 3),
-    (1.0, 1, 3),
-    (0.1, 1, 1),
-    (0.01, 1, 1),
+    (20.0, 1, 9),
+    (10.0, 1, 9),
+    (5.0, 1, 9),
+    (1.0, 1, 7),
+    (0.1, 1, 5),
+    (0.01, 1, 3),
     (0.0, 1, 1),
 ]
 
