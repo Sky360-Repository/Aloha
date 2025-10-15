@@ -96,7 +96,7 @@ class AEController:
         self.target_brightness = 0.5
         self.compensation_factor = 0.62 # [0..1] amout of brightness_error to be compensated - to prevent from overshooting
         self.histogram_sampling = 512
-        self.histogram_dark_point = 5
+        self.histogram_dark_point = 0 # set to 0 due to the masking, which contains lots of 0s
         self.histogram_bright_point = 507
 
     @staticmethod
