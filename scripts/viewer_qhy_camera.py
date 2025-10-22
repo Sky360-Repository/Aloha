@@ -10,7 +10,7 @@ from multiprocessing import shared_memory
 import multiprocessing.resource_tracker as resource_tracker
 import json
 import os
-from numba import njit
+from numba import njit, prange
 from math import radians, degrees, sin, cos, atan2, sqrt, asin
 
 # Constants (must match QHYCameraController config)
@@ -21,8 +21,8 @@ FRAME_WIDTH = 3200
 FRAME_HEIGHT = 3200
 FRAME_COUNT = 200
 BGS_DOWNSAMPLE = 2
-VIEWER_WINDOW = 800
-AZIMUTH_OFFSET_DEG = 90
+VIEWER_WINDOW = 3200
+AZIMUTH_OFFSET_DEG = 220
 FOV = 160.0
 
 AIRCRAFT_JSON_PATH = os.path.expanduser("~/dump1090-master/dump1090/public_html/data/aircraft.json")
@@ -30,7 +30,15 @@ OBSERVER_LAT = 47.647535944954846
 OBSERVER_LON = 14.841571479015096
 OBSERVER_ALT = 850
 
-debug = False
+GAMMA_MIN = 0.1
+GAMMA_MAX = 3.0
+GAMMA_INC = 0.1
+gamma = 2.2
+
+FONT_SIZE = 1.2
+
+debug = True
+adsb_debug = False
 aircraft_screen_coords = []
 
 # Viewer states
@@ -46,7 +54,10 @@ adsb_view = False
 
 center = (VIEWER_WINDOW // 2, VIEWER_WINDOW // 2)
 outer_radius = VIEWER_WINDOW // 2
-inner_radius = int((90.0 / 160.0) * outer_radius)
+inner_radius = int((90.0 / FOV) * outer_radius)
+
+scale_prev = np.ones(3, dtype=np.float32)
+alpha = 0.1  # EMA smoothing
 
 #plane_icon = cv2.imread("plane.png", cv2.IMREAD_UNCHANGED)
 PLANE_POLY = np.array([
@@ -70,6 +81,66 @@ PLANE_POLY = np.array([
     [-6.0, -23.0],
     [0.0, -30.0],    # close nose tip
 ], dtype=np.float32)
+
+NORTH_POLY = np.array([
+    [0.0, -27.0], #1
+    [-5.0, -24.0], #2
+    [-8.0, -24.0], #3
+    [0.0, -30.0], #4
+    [8.0, -24.0], #5
+    [5.0, -24.0], #6
+    [0.0, -27.0], #7
+    [0.0, -12.0], #8
+    [-5.0, -20.0], #9
+    [-7.0, -20.0], #10
+    [-7.0, -1.0], #11
+    [-5.0, -1.0], #12
+    [-5.0, -16.0], #13
+    [5.0, -1.0], #14
+    [7.0, -1.0], #15
+    [7.0, -20.0], #16
+    [5.0, -20.0], #17
+    [5.0, -5.0], #18
+    [0.0, -12.0], #19
+    [0.0, -27.0], #20
+], dtype=np.float32)
+
+# --- Gamma + scale LUT for ultra-fast conversion ---
+class GammaScaler:
+    def __init__(self, gamma=2.2, scale=None):
+        self.gamma = gamma
+        self.inv_gamma = 1.0 / gamma
+        if scale is None:
+            self.scale = np.ones(3, dtype=np.float32)
+        else:
+            self.scale = np.array(scale, dtype=np.float32)
+        self.lut = self._make_lut()
+
+    def _make_lut(self):
+        lut = np.zeros((3, 4096), dtype=np.uint8)
+        for c in range(3):
+            for i in range(4096):
+                val = ((i / 4095.0) ** self.inv_gamma) * self.scale[c]
+                val = min(max(val, 0.0), 1.0)
+                lut[c, i] = np.uint8(val * 255 + 0.5)
+        return lut
+
+    def update_gamma_scale(self, gamma=None, scale=None):
+        updated = False
+        if gamma is not None and gamma != self.gamma:
+            self.gamma = gamma
+            self.inv_gamma = 1.0 / gamma
+            updated = True
+        if scale is not None and not np.allclose(scale, self.scale):
+            self.scale = np.array(scale, dtype=np.float32)
+            updated = True
+        if updated:
+            self.lut = self._make_lut()
+
+    def apply(self, img_uint16):
+        return gamma_and_scale_lut(img_uint16, self.lut)
+
+gamma_scaler = GammaScaler(gamma=gamma, scale=scale_prev)
 
 @njit
 def haversine_distance(lat1, lon1, lat2, lon2):
@@ -114,12 +185,57 @@ def enu_to_az_el(x, y, z):
 def az_el_to_pixel(azimuth, elevation, img_size, fov_deg, az_offset_deg):
     if elevation < 0:
         return -1, -1  # below horizon
+    # Adjust azimuth by camera offset (positive means the camera image is rotated clockwise relative to true north)
     adjusted_az = (azimuth - az_offset_deg) % 360.0
     radius = (90.0 - elevation) / (fov_deg / 2.0) * (img_size / 2.0)
+    half = img_size / 2.0
+    if radius > half:
+        radius = half
     angle_rad = radians(adjusted_az)
-    x = img_size / 2.0 + radius * sin(angle_rad)
-    y = img_size / 2.0 - radius * cos(angle_rad)
-    return int(x), int(y)
+    x = half + radius * sin(angle_rad)
+    y = half - radius * cos(angle_rad)
+    return int(round(x)), int(round(y))
+         
+@njit(parallel=True, fastmath=True)
+def gamma_and_scale_lut(img_uint16, lut):
+    H, W, C = img_uint16.shape
+    out = np.empty((H, W, C), dtype=np.uint8)
+    for c in prange(C):
+        for y in range(H):
+            for x in range(W):
+                out[y, x, c] = lut[c, img_uint16[y, x, c]]
+    return out
+         
+def draw_north_marker(img, az_offset_deg, scale=2.0, thickness=2):
+    color = (0, 0, 128)
+    h, w = img.shape[:2]
+    cx, cy = w // 2, h // 2
+    radius = int(h * 0.48)  # distance from image center
+
+    # Scale polygon
+    poly = NORTH_POLY.astype(np.float32) * scale
+
+    # Translate polygon to image center (so rotation occurs around image center)
+    poly_centered = poly + np.array([cx, cy], dtype=np.float32)
+
+    # Rotation matrix around center
+    theta = radians(-az_offset_deg)  # clockwise
+    rot_mat = np.array([[cos(theta), -sin(theta)],
+                        [sin(theta),  cos(theta)]], dtype=np.float32)
+
+    # Rotate each point around center
+    rotated = (poly_centered - np.array([cx, cy])) @ rot_mat.T + np.array([cx, cy])
+
+    # Now translate along radial to circle edge
+    angle_rad = radians(-az_offset_deg)
+    dx = radius * sin(angle_rad)
+    dy = -radius * cos(angle_rad)
+    translated = rotated + np.array([dx, dy], dtype=np.float32)
+
+    # Draw polygon
+    pts = translated.astype(np.int32)
+    cv2.fillPoly(img, [pts], color, lineType=cv2.LINE_AA)
+    #cv2.polylines(img, [pts], isClosed=True, color=color, thickness=thickness, lineType=cv2.LINE_AA)
 
 def get_newest_index():
     timestamps = metadata_buffer[:, 0]
@@ -139,32 +255,58 @@ def draw_plane(img, center, angle_deg, color=(0, 0, 128), scale=1.0):
     cv2.fillPoly(img, [pts_int], color)
 
 def show_frame(index):
+    global_time = time.perf_counter()
+    global scale_prev
     img = frame_buffer[index]
-    debayered_img = cv2.cvtColor(img, cv2.COLOR_BayerRG2RGB)
-    scaled_img = debayered_img[::1, ::1] # scaling down to VIEWER_WINDOW = 800
-    scaled_img_8bit = cv2.convertScaleAbs(scaled_img, alpha=(255.0/65535.0)) # 8bit for overlays
+    if debug: print(f"Index: {index} ------------------------------------")
+    
+    ### Image preprocess for viewing
+    
+    # Debayering - 0.0225s
+    start_time = time.perf_counter()
+    debayered_img = cv2.cvtColor(img, cv2.COLOR_BayerRGGB2RGB_EA)
+    if debug: print(f"compute debayering: {(time.perf_counter() - start_time):.4f}s")
+    
+    # Compute per-channel average on downsampled 8-bit for EMA - 
+    start_time = time.perf_counter()
+    avg_down = debayered_img[::4, ::4, :].mean(axis=(0,1)).astype(np.float32)
+    gray = avg_down.mean()
+    scale = alpha * (gray / avg_down) + (1 - alpha) * scale_prev
+    scale_prev = scale.copy()
+    if debug: print(f"compute EMA scale: {(time.perf_counter() - start_time):.4f}s")
+    
+    # Update LUT if Gamma or per-channel scale changed
+    start_time = time.perf_counter()
+    gamma_scaler.update_gamma_scale(gamma=gamma, scale=scale)
+    img_8bit = gamma_scaler.apply(debayered_img)
+    if debug: print(f"compute Gamma: {(time.perf_counter() - start_time):.4f}s")
+
+    ### UI
 
     if bgs_view:
         mask = mask_buffer[index]
         num_fg_pixels = np.count_nonzero(mask) / mask.size * 100
-        mask_resized = cv2.resize(mask, (scaled_img_8bit.shape[1], scaled_img_8bit.shape[0]), interpolation=cv2.INTER_NEAREST)
-        scaled_img_8bit[mask_resized != 0] = [0, 0, 255]
+        mask_resized = cv2.resize(mask, (img_8bit.shape[1], img_8bit.shape[0]), interpolation=cv2.INTER_NEAREST)
+        img_8bit[mask_resized != 0] = [0, 0, 255]
 
     if info_view:
         timestamp = metadata_buffer[index][0]  # float seconds from time.time()
         dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
         timestamp_str = dt.strftime('%Y-%m-%d %H:%M:%S.') + f"{dt.microsecond // 100:04d} UTC"
-        cv2.putText(scaled_img_8bit, f"Index: {index}", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2, cv2.LINE_AA)
-        cv2.putText(scaled_img_8bit, f"Timestamp: {timestamp_str}", (10, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2, cv2.LINE_AA)
-        cv2.putText(scaled_img_8bit, f"Exposure: {int(metadata_buffer[index][1])}us", (10, 85), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2, cv2.LINE_AA)
-        cv2.putText(scaled_img_8bit, f"Gain: {metadata_buffer[index][2]:.2f}dB", (10, 115), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2, cv2.LINE_AA)
+        cv2.putText(img_8bit, f"Index: {index}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 2, cv2.LINE_AA)
+        cv2.putText(img_8bit, f"Timestamp: {timestamp_str}", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 2, cv2.LINE_AA)
+        cv2.putText(img_8bit, f"Exposure: {int(metadata_buffer[index][1])}us", (10, 110), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 2, cv2.LINE_AA)
+        cv2.putText(img_8bit, f"Gain: {metadata_buffer[index][2]:.2f}dB", (10, 150), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 2, cv2.LINE_AA)
+        cv2.putText(img_8bit, f"Gamma: {gamma:.1f} (press +/-)", (10, 190), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 2, cv2.LINE_AA)
         if bgs_view:
-            cv2.putText(scaled_img_8bit, f"Mask pixels: {num_fg_pixels:.4f}%", (10, 145), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2, cv2.LINE_AA)
+            cv2.putText(img_8bit, f"Mask pixels: {num_fg_pixels:.4f}%", (10, 230), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 2, cv2.LINE_AA)
 
     if adsb_view:
         aircraft_screen_coords.clear()
-        cv2.circle(scaled_img_8bit, center, outer_radius, (0, 0, 128), 1, lineType=cv2.LINE_AA)
-        cv2.circle(scaled_img_8bit, center, inner_radius, (0, 0, 128), 1, lineType=cv2.LINE_AA)
+        cv2.circle(img_8bit, center, outer_radius, (0, 0, 128), 2, lineType=cv2.LINE_AA)
+        cv2.circle(img_8bit, center, inner_radius, (0, 0, 128), 2, lineType=cv2.LINE_AA)
+        draw_north_marker(img_8bit, AZIMUTH_OFFSET_DEG, scale=2.0, thickness=4)
+        # Read aircraft JSON file
         try:
             with open(AIRCRAFT_JSON_PATH, 'r') as f:
                 aircraft_data = json.load(f)
@@ -179,7 +321,7 @@ def show_frame(index):
                 if alt is not None: alt *= 0.3048 # in meter
                 if lat is None or lon is None or alt is None:
                     continue
-                if debug: print(f"lat={lat}, lon={lon}, alt={alt}")
+                if adsb_debug: print(f"lat={lat}, lon={lon}, alt={alt}")
                 dist = distance_3d(OBSERVER_LAT, OBSERVER_LON, OBSERVER_ALT, lat, lon, alt)
                 x, y, z = geodetic_to_enu(lat, lon, alt, OBSERVER_LAT, OBSERVER_LON, OBSERVER_ALT)
                 az, el = enu_to_az_el(x, y, z)
@@ -187,17 +329,18 @@ def show_frame(index):
                 if 0 <= px < VIEWER_WINDOW and 0 <= py < VIEWER_WINDOW:
                     label = f"{flight}\nalt:{int(alt)} m\ngs:{int(gs)} km/h\nhdg:{int(mag_heading)}\ndist:{(dist // 1000):.1f} km"
                     aircraft_screen_coords.append((px, py, label, mag_heading))
-                for px, py, label, heading in aircraft_screen_coords:
-                    draw_plane(scaled_img_8bit, (px, py), heading - AZIMUTH_OFFSET_DEG, scale=0.25)
-                    # Split label into lines
-                    lines = label.split("\n")
-                    for i, line in enumerate(lines):
-                        cv2.putText(scaled_img_8bit, line, (px + 10, py + 20 + i * 15), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 0, 128), 1, cv2.LINE_AA)
-
         except Exception as e:
             print("Aircraft JSON read error:", e)
+        # 
+        for px, py, label, heading in aircraft_screen_coords:
+            draw_plane(img_8bit, (px, py), heading - AZIMUTH_OFFSET_DEG, scale=0.25)
+            # Split label into lines
+            lines = label.split("\n")
+            for i, line in enumerate(lines):
+                cv2.putText(img_8bit, line, (px + 10, py + 20 + i * 15), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 0, 128), 1, cv2.LINE_AA)
 
-    cv2.imshow(window_title, scaled_img_8bit)
+    cv2.imshow(window_title, img_8bit)
+    if debug: print(f"total compute FPS: {(time.perf_counter() - global_time):.4f}s")
 
 # Attach to shared memories
 shm = shared_memory.SharedMemory(name=RING_BUFFER_NAME)
@@ -243,6 +386,12 @@ while True:
     elif key == ord('i'):
         info_view = not info_view
         print(f"INFO = {info_view}")
+    elif key == ord('+'):
+        gamma = min(GAMMA_MAX, gamma + GAMMA_INC)
+        print(f"Gamma increased to {gamma:.1f}")
+    elif key == ord('-'):
+        gamma = max(GAMMA_MIN, gamma - GAMMA_INC)
+        print(f"Gamma decreased to {gamma:.1f}")
     elif key == ord('b'):
         bgs_view = not bgs_view
         print(f"BGS = {bgs_view}")

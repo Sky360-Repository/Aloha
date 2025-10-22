@@ -19,7 +19,7 @@ FRAME_SHAPE = (FULL_SHAPE[0] // DOWNSAMPLE, FULL_SHAPE[1] // DOWNSAMPLE)
 PIXEL_SIZE = 2
 HISTORY_LEN = 16
 FG_HISTORY_LEN = 5
-MATCH_THRESHOLD = 6400  # [0..32767]
+MATCH_THRESHOLD = 192  # [0..4095] multiple of 16
 REQUIRED_MATCHES = 2
 USE_SMOOTHING = False
 SMOOTHING_DECAY = 0.9  # exponential smoothing factor
@@ -27,6 +27,7 @@ update_toggle = True
 window_title = "Live BGS viewer - press 'q' to quit."
 morph_open = 3
 morph_close = 3
+dark_threshold = 16
 
 # Debugging
 debug = False
@@ -73,16 +74,20 @@ def process_frame(curr_frame: np.ndarray,
             if mask[y, x] == 0:
                 continue  # skip masked-out pixels entirely
             px = curr_frame[y, x]
+            # don’t evaluate very dark pixels
+            if px < dark_threshold:
+                continue 
             match_count = 0
-            min_val = 0
-            max_val = 0
+            min_val = history[y, x, 0]
+            max_val = history[y, x, 0]
             min_idx = 0
             max_idx = 0
 
+            # Compare with history frames
             for i in range(hist_len):
                 s = history[y, x, i]
-                diff = s - px if s >= px else px - s
-                if s > 5 and diff < match_threshold:
+                diff = abs(s - px)
+                if diff < match_threshold:
                     match_count += 1
                 if s < min_val:
                     min_val = s
@@ -91,15 +96,18 @@ def process_frame(curr_frame: np.ndarray,
                     max_val = s
                     max_idx = i
 
+            # Update history if pixel is background
             if match_count >= required_matches:
                 if update_:
                     history[y, x, rand_indices[y, x]] = px
                 else:
+                    # Replace the value that is furthest from current pixel
                     if abs(min_val - px) > abs(max_val - px):
                         history[y, x, min_idx] = px
                     else:
                         history[y, x, max_idx] = px
             else:
+                # Pixel considered foreground
                 fg_mask[y, x] = 255
 
     return fg_mask, history
@@ -155,7 +163,6 @@ prev_latest_idx = start_idx
 var_threshold = MATCH_THRESHOLD
 num_fg_pixels = 0.0
 
-# TODO: extend/replace with morphology
 scales = [
     (20.0, 1, 9),
     (10.0, 1, 9),
@@ -233,57 +240,6 @@ try:
         # Apply static mask and write final result to SHM
         final_mask[mask_small == 0] = 0
         mask_np[current_idx] = final_mask
-
-        """
-        # Debugging
-        fps = 1 / (time.perf_counter() - start_time)
-        num_fg_pixels = np.count_nonzero(final_mask) / final_mask.size * 100
-        if debug: print(f"resulting FPS: {fps:.2f}, mask pixels: {num_fg_pixels:.2f}% -----------------")
-
-        # Statistics
-        if stats:
-            var_frame = np.var(history, axis=2)
-            mean_var = np.mean(var_frame)
-            max_var = np.max(var_frame)
-            min_var = np.min(var_frame)
-            print(f"history variance profile: mean={mean_var:.2f}, max={max_var:.2f}, min={min_var:.2f}")
-            var_image = np.clip(np.sqrt(var_frame) / 64.0, 0, 255).astype(np.uint8)  # visual range tweak
-            var_heatmap = cv2.applyColorMap(var_image, cv2.COLORMAP_JET)
-
-        # Displaying the BGS results
-        frame_display = (frame.astype(np.float32) / 256).astype(np.uint8) # 8bit
-        frame_rgb = cv2.cvtColor(frame_display, cv2.COLOR_BayerRG2RGB)
-
-        if stats:
-            blended = cv2.addWeighted(frame_rgb, 0.3, var_heatmap, 0.7, 0)
-        else:
-            mask = final_mask != 0
-            blended = frame_rgb
-            blended[mask] = [0, 0, 255]
-
-        cv2.putText(blended, f"Buffer index: {current_idx}", (10, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2, cv2.LINE_AA)
-        cv2.putText(blended, f"FPS: {fps:.2f}", (10, 85), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2, cv2.LINE_AA)
-        cv2.putText(blended, f"Foreground pixels: {num_fg_pixels:.2f}%", (10, 115), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2, cv2.LINE_AA)
-        cv2.putText(blended, f"Threshold: {MATCH_THRESHOLD} (+/-)", (10, 145), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2, cv2.LINE_AA)
-        cv2.putText(blended, f"Smoothing decay: {SMOOTHING_DECAY:.2f} (s/x)", (10, 175), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2, cv2.LINE_AA)
-
-        cv2.imshow(window_title, blended)
-
-        key = cv2.waitKey(1) & 0xFF
-
-        if key == ord('q'):
-            if debug: print("Quit requested.")
-            break
-        elif key == ord('+'):
-            MATCH_THRESHOLD += 50
-        elif key == ord('-'):
-            MATCH_THRESHOLD -= 50
-        elif key == ord('s'):
-            SMOOTHING_DECAY += 0.01
-        elif key == ord('x'):
-            SMOOTHING_DECAY -= 0.01
-        """
-
 
 except KeyboardInterrupt:
     print("Interrupted.")

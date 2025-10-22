@@ -91,44 +91,61 @@ class AEController:
         self.exposure_max = 200000
         self.exposure_min_step = 50
         self.gain_min = 1.0
-        self.gain_max = 40.0
+        self.gain_max = 30.0
         self.gain_min_step = 0.5
         self.target_brightness = 0.5
-        self.compensation_factor = 0.62 # [0..1] amout of brightness_error to be compensated - to prevent from overshooting
+        self.compensation_factor = 0.62 # [0..1] amount of brightness_error to be compensated - to prevent from overshooting
         self.histogram_sampling = 512
-        self.histogram_dark_point = 0 # set to 0 due to the masking, which contains lots of 0s
-        self.histogram_bright_point = 507
+        self.histogram_dark_point = 5 # min=1
+        self.histogram_bright_point = 507 # max=511
 
     @staticmethod
     @njit
     def downsample_and_normalize(src):
+        """
+        Downsample 4x and normalize 12-bit data packed in uint16 frames.
+        QHY183C delivers 12-bit data (0..4095) in 16-bit pixels.
+        We simply divide by 4095.0 to scale to [0, 1].
+        """
         h, w = src.shape
-        out = np.empty((h // 4, w // 4), dtype=np.float32)
+        out_h = h // 4
+        out_w = w // 4
+        out = np.empty((out_h, out_w), dtype=np.float32)
         for y in range(0, h, 4):
             for x in range(0, w, 4):
-                out[y // 4, x // 4] = src[y, x] / 65535.0
+                out[y // 4, x // 4] = src[y, x] / 4095.0  # 12-bit normalization
         return out
 
     def update(self, exposure_us, gain, ring_buffer: RingBuffer):
-        #AE_start_time = time.perf_counter()
+        # Downsample & normalize 12-bit image
         gray_img = AEController.downsample_and_normalize(ring_buffer.frame_buffer[ring_buffer.frame_index])
-        #if debug: print(f"compute for reading image from ring buffer and taking every 4th pixel in grey: {(time.perf_counter() - AE_start_time):.4f}s")
 
-        # Histogram
+        # --- Histogram (mask-aware, ignore zeros) ---
         if self.mask is not None:
             mask_small = self.mask[::4, ::4]
-            valid_mask = (mask_small > 0)
-            histogram = cv2.calcHist([gray_img[valid_mask]], [0], None, [self.histogram_sampling], [0.0, 1.0]).flatten()
+            valid_pixels = gray_img[(mask_small > 0) & (gray_img > 0)]
         else:
-            histogram = cv2.calcHist([gray_img], [0], None, [self.histogram_sampling], [0.0, 1.0]).flatten()
+            valid_pixels = gray_img[gray_img > 0]
 
-        histogram /= histogram.sum()
-        cdf = np.clip(np.cumsum(histogram), 0.0, 1.0)
-        dark_ratio = cdf[self.histogram_dark_point]
-        bright_ratio = 1.0 - cdf[self.histogram_bright_point]
-        # if debug: print(f"AE: dark_ratio={dark_ratio:.8f}, bright_ratio={bright_ratio:.8f}")
+        if valid_pixels.size == 0:
+            # fallback if nothing left
+            valid_pixels = gray_img.ravel()
 
-        # Smoothing
+        # compute histogram in normalized [0,1] range
+        hist, _ = np.histogram(valid_pixels, bins=self.histogram_sampling, range=(0.0, 1.0))
+        hist = hist.astype(np.float64)
+        if hist.sum() == 0:
+            histogram = np.ones_like(hist, dtype=np.float64) / float(hist.size)
+        else:
+            histogram = hist / hist.sum()
+
+        # CDF
+        cdf = np.cumsum(histogram)
+        cdf = np.clip(cdf, 0.0, 1.0)
+        dark_ratio = float(cdf[self.histogram_dark_point])
+        bright_ratio = float(1.0 - cdf[self.histogram_bright_point])
+
+        # --- Exponential smoothing ---
         if self.smoothed_dark_ratio is None:
             self.smoothed_dark_ratio = dark_ratio
             self.smoothed_bright_ratio = bright_ratio
@@ -136,22 +153,26 @@ class AEController:
             self.smoothed_dark_ratio = self.SMOOTHING_ALPHA * dark_ratio + (1 - self.SMOOTHING_ALPHA) * self.smoothed_dark_ratio
             self.smoothed_bright_ratio = self.SMOOTHING_ALPHA * bright_ratio + (1 - self.SMOOTHING_ALPHA) * self.smoothed_bright_ratio
 
+        # Compute current brightness from smoothed CDF ratios
         self.current_brightness = 0.5 * (1.0 - self.smoothed_dark_ratio) + 0.5 * self.smoothed_bright_ratio
 
+        # Compute brightness error
         if self.target_brightness > 0:
-            self.brightness_error = np.round(np.log2(self.target_brightness / self.current_brightness), 2) # avoids jiggering
+            self.brightness_error = np.round(np.log2(self.target_brightness / self.current_brightness), 2)
         else:
             self.brightness_error = 0.0
 
+        # --- Gain/Exposure logic ---
         self.state = ""
         adjusted_gain = gain
 
-        # Gain
+        # Gain adjustment
         if gain != self.target_gain:
             gain_error = self.compensation_factor * self.brightness_error
             proposed_gain = gain * np.power(2, gain_error)
             crosses_target = (gain - self.target_gain) * (proposed_gain - self.target_gain) < 0
-            narrows_target = abs(proposed_gain - self.target_gain) < abs(gain - self.target_gain) and (gain - self.target_gain) * (proposed_gain - self.target_gain) >= 0
+            narrows_target = abs(proposed_gain - self.target_gain) < abs(gain - self.target_gain) and \
+                             (gain - self.target_gain) * (proposed_gain - self.target_gain) >= 0
 
             if crosses_target:
                 adjusted_gain = self.target_gain
@@ -163,18 +184,10 @@ class AEController:
 
         gain_applied = np.log2(adjusted_gain / gain) if gain > 0 else 0.0
         remain_error = self.compensation_factor * self.brightness_error - gain_applied
-        
-        # Exposure control
+
+        # Exposure adjustment
         proposed_exposure = exposure_us * np.power(2, remain_error)
-
-        if proposed_exposure < self.exposure_max:
-            adjusted_exposure = proposed_exposure
-            self.state += " | adjusting exposure"
-        else:
-            adjusted_exposure = self.exposure_max
-            self.state += " | setting exposure to max"
-
-        adjusted_exposure = np.clip(adjusted_exposure, self.exposure_min, self.exposure_max)
+        adjusted_exposure = np.clip(proposed_exposure, self.exposure_min, self.exposure_max)
 
         exposure_applied = np.log2(adjusted_exposure / exposure_us) if exposure_us > 0 else 0.0
         leftover_error = remain_error - exposure_applied
@@ -182,22 +195,15 @@ class AEController:
         adjusted_gain = np.clip(proposed_gain, self.gain_min, self.gain_max)
         self.state += " | adjusting gain for the rest"
 
-        if abs(adjusted_exposure - exposure_us) >= self.exposure_min_step:
-            new_exposure = adjusted_exposure
-            self.state += " | exposure update"
-        else:
-            new_exposure = exposure_us
-            self.state += " | no update for exposure"
+        new_exposure = adjusted_exposure if abs(adjusted_exposure - exposure_us) >= self.exposure_min_step else exposure_us
+        new_gain = adjusted_gain if abs(adjusted_gain - gain) >= self.gain_min_step else gain
 
-        if abs(adjusted_gain - gain) >= self.gain_min_step:
-            new_gain = adjusted_gain
-            self.state += " | gain update"
-        else:
-            new_gain = gain
-            self.state += " | no update for gain"
+        if debug:
+            print(f"AE(csv): {ring_buffer.frame_index},{self.current_brightness:.4f},{self.brightness_error:.4f},{int(new_exposure)},{new_gain:.2f},{self.state}")
 
-        if debug: print(f"AE(csv): {ring_buffer.frame_index},{self.current_brightness:.4f},{self.brightness_error:.4f},{int(new_exposure)},{new_gain:.2f},{self.state}")
         return new_exposure, new_gain
+
+
 
 class QHYCameraController:
     # Constants
@@ -351,12 +357,12 @@ class QHYCameraController:
             if debug: print(f"Initialization: failed to open camera ❌")
         time.sleep(0.5)
 
-        # Setting 16-bit mode
-        ret = self.sdk.SetQHYCCDBitsMode(self.cam, 16)
+        # Setting camera to 12-bit mode
+        ret = self.sdk.SetQHYCCDBitsMode(self.cam, 12)
         if (ret == 0):
-            if debug: print(f"Initialization: successfully set bits mode to 16 ✅")
+            if debug: print(f"Initialization: successfully set camera bits mode to 12 ✅")
         else:
-            if debug: print(f"Initialization: failed to set bits mode ❌")
+            if debug: print(f"Initialization: failed to set camera bits mode ❌")
         time.sleep(0.5)
 
         # Setting transfer bit
@@ -531,6 +537,8 @@ class QHYCameraController:
         if (ret == 0):
             # Convert buffer to image
             img = np.frombuffer(self.temp_buffer, dtype=np.uint16).reshape((self.h.value, self.w.value))
+            img = img >> 4  # QHY183C outputs 12-bit packed into 16 bits (shifted)
+            #if debug: print(f"raw max={img.max()}  min={img.min()}  mean={img.mean():.1f}")
 
             # Apply binary mask
             if self.mask is not None:
