@@ -46,11 +46,12 @@ last_timestamp = 0.0
 current_index = 0
 frame_counter = 0
 fps_timer_start = time.time()
-window_title = "i ... info     a ... ADSB     b ... BGS     q ... quit"
+window_title = "Sky360 Fisheye Viewer (i...info)"
 paused = False
 bgs_view = False
 info_view = False
 adsb_view = False
+humanRGB = False
 
 center = (VIEWER_WINDOW // 2, VIEWER_WINDOW // 2)
 outer_radius = VIEWER_WINDOW // 2
@@ -58,6 +59,12 @@ inner_radius = int((90.0 / FOV) * outer_radius)
 
 scale_prev = np.ones(3, dtype=np.float32)
 alpha = 0.1  # EMA smoothing
+
+# --- Spectral correction coefficients (from fitted sensitivity balance)
+# Normalize such that average gain = 1.0
+R_corr = 1.18  # less sensitive in red, boost it slightly
+G_corr = 1.00  # reference
+B_corr = 1.32  # more loss in blue channel
 
 #plane_icon = cv2.imread("plane.png", cv2.IMREAD_UNCHANGED)
 PLANE_POLY = np.array([
@@ -205,7 +212,51 @@ def gamma_and_scale_lut(img_uint16, lut):
             for x in range(W):
                 out[y, x, c] = lut[c, img_uint16[y, x, c]]
     return out
-         
+
+@njit(parallel=True, fastmath=True)
+def debayer_RGGB2humanRGB(raw):
+    h, w = raw.shape
+    rgb = np.empty((h, w, 3), dtype=np.uint16)
+    h2, w2 = int(h // 2), int(w // 2)
+
+    for y2 in prange(h2):
+        y = y2 * 2
+        for x2 in range(w2):
+            x = x2 * 2
+
+            # read RGGB 2x2 block
+            r = raw[y, x]
+            g1 = raw[y, x + 1]
+            g2 = raw[y + 1, x]
+            b = raw[y + 1, x + 1]
+            g = (g1 + g2) * 0.5
+
+            # clamp to 12-bit and scale
+            r_val = min(int(r * 1.18), 4095)
+            g_val = min(int(g * 1.00), 4095)
+            b_val = min(int(b * 1.32), 4095)
+
+            # fill 2x2 block
+            rgb[y, x, 0] = r_val
+            rgb[y, x, 1] = g_val
+            rgb[y, x, 2] = b_val
+
+            rgb[y, x + 1, 0] = r_val
+            rgb[y, x + 1, 1] = g_val
+            rgb[y, x + 1, 2] = b_val
+
+            rgb[y + 1, x, 0] = r_val
+            rgb[y + 1, x, 1] = g_val
+            rgb[y + 1, x, 2] = b_val
+
+            rgb[y + 1, x + 1, 0] = r_val
+            rgb[y + 1, x + 1, 1] = g_val
+            rgb[y + 1, x + 1, 2] = b_val
+
+    return rgb
+
+
+
 def draw_north_marker(img, az_offset_deg, scale=2.0, thickness=2):
     color = (0, 0, 128)
     h, w = img.shape[:2]
@@ -264,7 +315,10 @@ def show_frame(index):
     
     # Debayering - 0.0225s
     start_time = time.perf_counter()
-    debayered_img = cv2.cvtColor(img, cv2.COLOR_BayerRGGB2RGB_EA)
+    if humanRGB:
+        debayered_img = debayer_RGGB2humanRGB(img)
+    else:
+        debayered_img = cv2.cvtColor(img, cv2.COLOR_BayerRGGB2RGB_EA)
     if debug: print(f"compute debayering: {(time.perf_counter() - start_time):.4f}s")
     
     # Compute per-channel average on downsampled 8-bit for EMA - 
@@ -298,8 +352,14 @@ def show_frame(index):
         cv2.putText(img_8bit, f"Exposure: {int(metadata_buffer[index][1])}us", (10, 110), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 2, cv2.LINE_AA)
         cv2.putText(img_8bit, f"Gain: {metadata_buffer[index][2]:.2f}dB", (10, 150), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 2, cv2.LINE_AA)
         cv2.putText(img_8bit, f"Gamma: {gamma:.1f} (press +/-)", (10, 190), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 2, cv2.LINE_AA)
-        if bgs_view:
-            cv2.putText(img_8bit, f"Mask pixels: {num_fg_pixels:.4f}%", (10, 230), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 2, cv2.LINE_AA)
+        if bgs_view: cv2.putText(img_8bit, f"Mask pixels: {num_fg_pixels:.4f}%", (10, 230), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 2, cv2.LINE_AA)
+        cv2.putText(img_8bit, "Keys:", (10, 230), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 2, cv2.LINE_AA)
+        cv2.putText(img_8bit, "a ...ADSB", (10, 270), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 2, cv2.LINE_AA)
+        cv2.putText(img_8bit, "b ...BGS", (10, 310), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 2, cv2.LINE_AA)
+        cv2.putText(img_8bit, "2 ...pause", (10, 350), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 2, cv2.LINE_AA)
+        cv2.putText(img_8bit, "3 ...forward", (10, 390), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 2, cv2.LINE_AA)
+        cv2.putText(img_8bit, "1 ...backward", (10, 430), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 2, cv2.LINE_AA)
+        cv2.putText(img_8bit, "q ...quit", (10, 470), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 2, cv2.LINE_AA)
 
     if adsb_view:
         aircraft_screen_coords.clear()
@@ -340,7 +400,7 @@ def show_frame(index):
                 cv2.putText(img_8bit, line, (px + 10, py + 20 + i * 15), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 0, 128), 1, cv2.LINE_AA)
 
     cv2.imshow(window_title, img_8bit)
-    if debug: print(f"total compute FPS: {(time.perf_counter() - global_time):.4f}s")
+    if debug: print(f"total compute FPS: {1 / (time.perf_counter() - global_time):.2f}")
 
 # Attach to shared memories
 shm = shared_memory.SharedMemory(name=RING_BUFFER_NAME)
@@ -356,7 +416,7 @@ resource_tracker.unregister(shm3._name, 'shared_memory')
 mask_buffer = np.ndarray((FRAME_COUNT, FRAME_WIDTH // BGS_DOWNSAMPLE, FRAME_HEIGHT // BGS_DOWNSAMPLE), dtype=np.uint8, buffer=shm3.buf) # BGS runs on 50% size, so 1600x1600
 
 cv2.namedWindow(window_title, cv2.WINDOW_NORMAL)
-cv2.resizeWindow(window_title, VIEWER_WINDOW, VIEWER_WINDOW)
+cv2.resizeWindow(window_title, 1080, 1080)
 
 while True:
     key = cv2.waitKey(10) & 0xFF
@@ -369,20 +429,22 @@ while True:
             frame_counter += 1
             show_frame(current_index) # 0.03-0.06s
     else:
-        if key == ord('d') or key == 83:  # Right arrow or 'd'
+        if key == ord('3') or key == 83:  # Right arrow or 'd'
             current_index = (current_index + 1) % FRAME_COUNT
             show_frame(current_index)
-        elif key == ord('a') or key == 81:  # Left arrow or 'a'
+        elif key == ord('1') or key == 81:  # Left arrow or 'a'
             current_index = (current_index - 1) % FRAME_COUNT
             show_frame(current_index)
 
     # Handle toggle and quit
-    if key == ord(' '):  # spacebar
+    if key == ord('2'):
         paused = not paused
-        #print("⏯️ Paused" if paused else "▶️ Resumed")
     elif key == ord('a'):
         adsb_view = not adsb_view
         print(f"ADSB = {adsb_view}")
+    elif key == ord('h'):
+        humanRGB = not humanRGB
+        print(f"humanRGB = {humanRGB}")
     elif key == ord('i'):
         info_view = not info_view
         print(f"INFO = {info_view}")
