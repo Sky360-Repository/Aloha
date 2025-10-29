@@ -29,6 +29,7 @@ AIRCRAFT_JSON_PATH = os.path.expanduser("~/dump1090-master/dump1090/public_html/
 OBSERVER_LAT = 47.647535944954846
 OBSERVER_LON = 14.841571479015096
 OBSERVER_ALT = 850
+MIRROR_EW = True
 
 GAMMA_MIN = 0.1
 GAMMA_MAX = 3.0
@@ -62,8 +63,8 @@ alpha = 0.1  # EMA smoothing
 
 # --- Spectral correction coefficients (from fitted sensitivity balance)
 # Normalize such that average gain = 1.0
-R_corr = 1.18  # less sensitive in red, boost it slightly
-G_corr = 1.00  # reference
+R_corr = 0.85  # (less sensitive in red >> boost it slightly) reference 1.18, testing 0.85
+G_corr = 0.85  # reference 1.00, testing 0.85
 B_corr = 1.32  # more loss in blue channel
 
 #plane_icon = cv2.imread("plane.png", cv2.IMREAD_UNCHANGED)
@@ -112,6 +113,58 @@ NORTH_POLY = np.array([
     [0.0, -27.0], #20
 ], dtype=np.float32)
 
+E_POLY = np.array([
+    [-7.0, -20.0], #1
+    [7.0, -20.0], #2
+    [7.0, -17.0], #3
+    [-4.0, -17.0], #4
+    [-4.0, -13.0], #5
+    [4.0, -13.0], #6
+    [4.0, -9.0], #7
+    [-4.0, -9.0], #8
+    [-4.0,  -4.0], #9
+    [7.0,  -4.0], #10
+    [7.0,  -1.0], #11
+    [-7.0, -1.0], #12
+], dtype=np.float32)
+
+S_POLY = np.array([
+    [7.0, -20.0], #1
+    [-4.0, -20.0], #2
+    [-7.0, -17.0], #3
+    [-7.0, -13.0], #4
+    [-4.0, -10.0], #5
+    [2.0,  -8.0], #6
+    [4.0,  -6.0], #7
+    [2.0,  -4.0], #8
+    [-7.0, -4.0], #9
+    [-7.0, -1.0], #10
+    [4.0, -1.0], #11
+    [7.0, -4.0], #12
+    [7.0, -8.0], #13
+    [4.0, -11.0], #14
+    [-2.0, -13.0], #15
+    [-4.0, -15.0], #16
+    [-2.0, -17.0], #17
+    [7.0, -17.0], #18
+], dtype=np.float32)
+
+W_POLY = np.array([
+    [-10.0, -20.0], #1
+    [-7.0,  -20.0], #2
+    [-5.0,  -5.0], #3
+    [0.0,  -14.0], #4
+    [5.0, -5.0], #5
+    [7.0,  -20.0], #6
+    [10.0,  -20.0], #7
+    [7.0,  -1.0], #8
+    [4.0,  -1.0], #9
+    [0.0, -10.0], #10
+    [-4.0, -1.0], #11
+    [-7.0, -1.0], #12
+], dtype=np.float32)
+
+
 # --- Gamma + scale LUT for ultra-fast conversion ---
 class GammaScaler:
     def __init__(self, gamma=2.2, scale=None):
@@ -132,6 +185,7 @@ class GammaScaler:
                 lut[c, i] = np.uint8(val * 255 + 0.5)
         return lut
 
+
     def update_gamma_scale(self, gamma=None, scale=None):
         updated = False
         if gamma is not None and gamma != self.gamma:
@@ -144,10 +198,12 @@ class GammaScaler:
         if updated:
             self.lut = self._make_lut()
 
+
     def apply(self, img_uint16):
         return gamma_and_scale_lut(img_uint16, self.lut)
 
 gamma_scaler = GammaScaler(gamma=gamma, scale=scale_prev)
+
 
 @njit
 def haversine_distance(lat1, lon1, lat2, lon2):
@@ -161,12 +217,14 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     c = 2 * atan2(sqrt(a), sqrt(1 - a))
     return R * c
 
+
 @njit
 def distance_3d(lat1, lon1, alt1, lat2, lon2, alt2):
     # Compute 3D distance between observer and aircraft (meters)
     ground_distance = haversine_distance(lat1, lon1, lat2, lon2)
     delta_alt = alt2 - alt1  # usually alt2 is much higher
     return sqrt(ground_distance**2 + delta_alt**2)
+
 
 @njit
 def geodetic_to_enu(lat, lon, alt, obs_lat, obs_lon, obs_alt):
@@ -181,12 +239,14 @@ def geodetic_to_enu(lat, lon, alt, obs_lat, obs_lon, obs_alt):
     z = alt - obs_alt
     return x, y, z
 
+
 @njit
 def enu_to_az_el(x, y, z):
     horiz_dist = sqrt(x**2 + y**2)
     az = atan2(x, y)
     el = atan2(z, horiz_dist)
     return degrees(az) % 360, degrees(el)
+
 
 @njit
 def az_el_to_pixel(azimuth, elevation, img_size, fov_deg, az_offset_deg):
@@ -203,6 +263,7 @@ def az_el_to_pixel(azimuth, elevation, img_size, fov_deg, az_offset_deg):
     y = half - radius * cos(angle_rad)
     return int(round(x)), int(round(y))
          
+         
 @njit(parallel=True, fastmath=True)
 def gamma_and_scale_lut(img_uint16, lut):
     H, W, C = img_uint16.shape
@@ -213,85 +274,95 @@ def gamma_and_scale_lut(img_uint16, lut):
                 out[y, x, c] = lut[c, img_uint16[y, x, c]]
     return out
 
+
 @njit(parallel=True, fastmath=True)
 def debayer_RGGB2humanRGB(raw):
+    """
+    Bilinear debayer for RGGB Bayer pattern.
+    Returns full-resolution RGB (uint16, 0–4095) with simple spectral scaling.
+    """
     h, w = raw.shape
     rgb = np.empty((h, w, 3), dtype=np.uint16)
-    h2, w2 = int(h // 2), int(w // 2)
 
-    for y2 in prange(h2):
-        y = y2 * 2
-        for x2 in range(w2):
-            x = x2 * 2
+    for y in prange(1, h - 1):
+        for x in range(1, w - 1):
 
-            # read RGGB 2x2 block
-            r = raw[y, x]
-            g1 = raw[y, x + 1]
-            g2 = raw[y + 1, x]
-            b = raw[y + 1, x + 1]
-            g = (g1 + g2) * 0.5
+            if (y % 2 == 0) and (x % 2 == 0):
+                # Red pixel
+                R = raw[y, x]
+                G = (raw[y, x-1] + raw[y, x+1] + raw[y-1, x] + raw[y+1, x]) * 0.25
+                B = (raw[y-1, x-1] + raw[y-1, x+1] + raw[y+1, x-1] + raw[y+1, x+1]) * 0.25
 
-            # clamp to 12-bit and scale
-            r_val = min(int(r * 1.18), 4095)
-            g_val = min(int(g * 1.00), 4095)
-            b_val = min(int(b * 1.32), 4095)
+            elif (y % 2 == 0) and (x % 2 == 1):
+                # Green pixel on red row
+                R = (raw[y, x-1] + raw[y, x+1]) * 0.5
+                G = raw[y, x]
+                B = (raw[y-1, x] + raw[y+1, x]) * 0.5
 
-            # fill 2x2 block
-            rgb[y, x, 0] = r_val
-            rgb[y, x, 1] = g_val
-            rgb[y, x, 2] = b_val
+            elif (y % 2 == 1) and (x % 2 == 0):
+                # Green pixel on blue row
+                R = (raw[y-1, x] + raw[y+1, x]) * 0.5
+                G = raw[y, x]
+                B = (raw[y, x-1] + raw[y, x+1]) * 0.5
 
-            rgb[y, x + 1, 0] = r_val
-            rgb[y, x + 1, 1] = g_val
-            rgb[y, x + 1, 2] = b_val
+            else:
+                # Blue pixel
+                R = (raw[y-1, x-1] + raw[y-1, x+1] + raw[y+1, x-1] + raw[y+1, x+1]) * 0.25
+                G = (raw[y, x-1] + raw[y, x+1] + raw[y-1, x] + raw[y+1, x]) * 0.25
+                B = raw[y, x]
 
-            rgb[y + 1, x, 0] = r_val
-            rgb[y + 1, x, 1] = g_val
-            rgb[y + 1, x, 2] = b_val
+            # --- simple spectral sensitivity compensation ---
+            R = min(R * R_corr, 4095.0)
+            G = min(G * G_corr, 4095.0)
+            B = min(B * B_corr, 4095.0)
 
-            rgb[y + 1, x + 1, 0] = r_val
-            rgb[y + 1, x + 1, 1] = g_val
-            rgb[y + 1, x + 1, 2] = b_val
+            rgb[y, x, 0] = np.uint16(R)
+            rgb[y, x, 1] = np.uint16(G)
+            rgb[y, x, 2] = np.uint16(B)
+
+    # optional: copy border pixels from neighbors
+    for x in prange(w):
+        rgb[0, x] = rgb[1, x]
+        rgb[h - 1, x] = rgb[h - 2, x]
+    for y in prange(h):
+        rgb[y, 0] = rgb[y, 1]
+        rgb[y, w - 1] = rgb[y, w - 2]
 
     return rgb
 
 
-
-def draw_north_marker(img, az_offset_deg, scale=2.0, thickness=2):
-    color = (0, 0, 128)
+def draw_cardinal(img, poly, target_az_deg, az_offset_deg, scale=2.0, color=(0,0,128)):
     h, w = img.shape[:2]
     cx, cy = w // 2, h // 2
-    radius = int(h * 0.48)  # distance from image center
+    radius = int(h * 0.48)
 
-    # Scale polygon
-    poly = NORTH_POLY.astype(np.float32) * scale
+    p = poly.astype(np.float32) * scale
+    poly_centered = p + np.array([cx, cy], dtype=np.float32)
 
-    # Translate polygon to image center (so rotation occurs around image center)
-    poly_centered = poly + np.array([cx, cy], dtype=np.float32)
+    global MIRROR_EW
+    sign = -1 if not MIRROR_EW else +1
+    #theta = radians(sign * (az_offset_deg + target_az_deg))
+    theta = radians(sign * (az_offset_deg + target_az_deg - 90.0))
 
-    # Rotation matrix around center
-    theta = radians(-az_offset_deg)  # clockwise
     rot_mat = np.array([[cos(theta), -sin(theta)],
                         [sin(theta),  cos(theta)]], dtype=np.float32)
 
-    # Rotate each point around center
     rotated = (poly_centered - np.array([cx, cy])) @ rot_mat.T + np.array([cx, cy])
 
-    # Now translate along radial to circle edge
-    angle_rad = radians(-az_offset_deg)
+    angle_rad = theta
     dx = radius * sin(angle_rad)
     dy = -radius * cos(angle_rad)
     translated = rotated + np.array([dx, dy], dtype=np.float32)
 
-    # Draw polygon
     pts = translated.astype(np.int32)
     cv2.fillPoly(img, [pts], color, lineType=cv2.LINE_AA)
-    #cv2.polylines(img, [pts], isClosed=True, color=color, thickness=thickness, lineType=cv2.LINE_AA)
+
 
 def get_newest_index():
     timestamps = metadata_buffer[:, 0]
     newest = np.argmax(timestamps)
     return newest
+
 
 def draw_plane(img, center, angle_deg, color=(0, 0, 128), scale=1.0):
     angle_rad = np.radians(angle_deg)
@@ -304,6 +375,18 @@ def draw_plane(img, center, angle_deg, color=(0, 0, 128), scale=1.0):
     translated = rotated + np.array(center)
     pts_int = np.round(translated).astype(np.int32)
     cv2.fillPoly(img, [pts_int], color)
+
+
+def draw_text_box(img, text, org, font_scale=1, color=(0, 0, 128), thickness=2):
+    lines = text.split("\n")
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    line_height = int(36 * font_scale)
+    max_width = max([cv2.getTextSize(line, font, font_scale, thickness)[0][0] for line in lines])
+    x, y = org
+    for i, line in enumerate(lines):
+        text_y = y + (i + 1) * line_height
+        cv2.putText(img, line, (x, text_y), font, font_scale, color, thickness, cv2.LINE_AA)
+
 
 def show_frame(index):
     global_time = time.perf_counter()
@@ -347,57 +430,104 @@ def show_frame(index):
         timestamp = metadata_buffer[index][0]  # float seconds from time.time()
         dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
         timestamp_str = dt.strftime('%Y-%m-%d %H:%M:%S.') + f"{dt.microsecond // 100:04d} UTC"
-        cv2.putText(img_8bit, f"Index: {index}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 2, cv2.LINE_AA)
-        cv2.putText(img_8bit, f"Timestamp: {timestamp_str}", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 2, cv2.LINE_AA)
-        cv2.putText(img_8bit, f"Exposure: {int(metadata_buffer[index][1])}us", (10, 110), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 2, cv2.LINE_AA)
-        cv2.putText(img_8bit, f"Gain: {metadata_buffer[index][2]:.2f}dB", (10, 150), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 2, cv2.LINE_AA)
-        cv2.putText(img_8bit, f"Gamma: {gamma:.1f} (press +/-)", (10, 190), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 2, cv2.LINE_AA)
-        if bgs_view: cv2.putText(img_8bit, f"Mask pixels: {num_fg_pixels:.4f}%", (10, 230), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 2, cv2.LINE_AA)
-        cv2.putText(img_8bit, "Keys:", (10, 230), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 2, cv2.LINE_AA)
-        cv2.putText(img_8bit, "a ...ADSB", (10, 270), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 2, cv2.LINE_AA)
-        cv2.putText(img_8bit, "b ...BGS", (10, 310), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 2, cv2.LINE_AA)
-        cv2.putText(img_8bit, "2 ...pause", (10, 350), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 2, cv2.LINE_AA)
-        cv2.putText(img_8bit, "3 ...forward", (10, 390), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 2, cv2.LINE_AA)
-        cv2.putText(img_8bit, "1 ...backward", (10, 430), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 2, cv2.LINE_AA)
-        cv2.putText(img_8bit, "q ...quit", (10, 470), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 2, cv2.LINE_AA)
+        
+        # Data
+        cv2.putText(img_8bit, f"Index: {index}", (40, 70), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 3, cv2.LINE_AA)
+        cv2.putText(img_8bit, f"Timestamp: {timestamp_str}", (40, 110), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 3, cv2.LINE_AA)
+        cv2.putText(img_8bit, f"Exposure: {int(metadata_buffer[index][1])}us", (40, 150), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 3, cv2.LINE_AA)
+        cv2.putText(img_8bit, f"Gain: {metadata_buffer[index][2]:.2f}dB", (40, 190), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 3, cv2.LINE_AA)
+        cv2.putText(img_8bit, f"Gamma: {gamma:.1f}", (40, 230), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 3, cv2.LINE_AA)
+        if bgs_view: cv2.putText(img_8bit, f"Mask pixels: {num_fg_pixels:.4f}%", (40, 270), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 3, cv2.LINE_AA)
+
+        # Keys
+        cv2.putText(img_8bit, "a ...ADSB", (40, 2820), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 3, cv2.LINE_AA)
+        cv2.putText(img_8bit, "b ...BGS", (40, 2860), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 3, cv2.LINE_AA)
+        cv2.putText(img_8bit, "h ...humanRGB", (40, 2900), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 3, cv2.LINE_AA)
+        cv2.putText(img_8bit, "+ ...Gamma++", (40, 2940), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 3, cv2.LINE_AA)
+        cv2.putText(img_8bit, "- ...Gamma--", (40, 2980), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 3, cv2.LINE_AA)
+        cv2.putText(img_8bit, "2 ...pause", (40, 3020), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 3, cv2.LINE_AA)
+        cv2.putText(img_8bit, "3 ...forward", (40, 3060), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 3, cv2.LINE_AA)
+        cv2.putText(img_8bit, "1 ...backward", (40, 3100), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 3, cv2.LINE_AA)
+        cv2.putText(img_8bit, "q ...quit", (40, 3140), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 3, cv2.LINE_AA)
+        
+        # Flags
+        if humanRGB: cv2.putText(img_8bit, "humanRGB", (1450,3140), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (255, 0, 0), 3, cv2.LINE_AA)
 
     if adsb_view:
         aircraft_screen_coords.clear()
         cv2.circle(img_8bit, center, outer_radius, (0, 0, 128), 2, lineType=cv2.LINE_AA)
         cv2.circle(img_8bit, center, inner_radius, (0, 0, 128), 2, lineType=cv2.LINE_AA)
-        draw_north_marker(img_8bit, AZIMUTH_OFFSET_DEG, scale=2.0, thickness=4)
+
+        # --- draw cardinal letters N, E, S, W (respect MIRROR_EW for E/W) ---
+        # N: 0 deg, E: 90 deg, S: 180 deg, W: 270 deg
+        cardinal_list = [
+            (NORTH_POLY, 0.0),
+            (E_POLY, 90.0),
+            (S_POLY, 180.0),
+            (W_POLY, 270.0),
+        ]
+        for poly, az_deg in cardinal_list:
+            draw_az = az_deg
+            # If the fisheye is mirrored left-right, swap E <-> W by mirroring their azimuth
+            if MIRROR_EW and (az_deg == 90.0 or az_deg == 270.0):
+                draw_az = (360.0 - az_deg) % 360.0
+            draw_cardinal(img_8bit, poly, draw_az, AZIMUTH_OFFSET_DEG, scale=2.0, color=(0,0,128))
+
         # Read aircraft JSON file
         try:
             with open(AIRCRAFT_JSON_PATH, 'r') as f:
                 aircraft_data = json.load(f)
+
             for ac in aircraft_data.get("aircraft", []):
                 flight = ac.get("flight", "").strip()
                 gs = ac.get("gs", 0)
-                if gs is not None: gs *= 1.852 # in km/h
+                if gs is not None:
+                    gs *= 1.852  # convert to km/h
+
                 mag_heading = ac.get("track", 0)
                 lat = ac.get("lat")
                 lon = ac.get("lon")
-                alt = ac.get("alt_baro") or ac.get("alt_geom") or ac.get("alt") # in feet
-                if alt is not None: alt *= 0.3048 # in meter
+                alt = ac.get("alt_baro") or ac.get("alt_geom") or ac.get("alt")  # in feet
+                if alt is not None:
+                    alt *= 0.3048  # to meters
+
                 if lat is None or lon is None or alt is None:
                     continue
+
                 if adsb_debug: print(f"lat={lat}, lon={lon}, alt={alt}")
+
                 dist = distance_3d(OBSERVER_LAT, OBSERVER_LON, OBSERVER_ALT, lat, lon, alt)
                 x, y, z = geodetic_to_enu(lat, lon, alt, OBSERVER_LAT, OBSERVER_LON, OBSERVER_ALT)
                 az, el = enu_to_az_el(x, y, z)
+
+                # --- Mirror East/West if fisheye image is mirrored left-right ---
+                if MIRROR_EW: az = (360.0 - az) % 360.0
+
                 px, py = az_el_to_pixel(az, el, VIEWER_WINDOW, FOV, AZIMUTH_OFFSET_DEG)
+
                 if 0 <= px < VIEWER_WINDOW and 0 <= py < VIEWER_WINDOW:
-                    label = f"{flight}\nalt:{int(alt)} m\ngs:{int(gs)} km/h\nhdg:{int(mag_heading)}\ndist:{(dist // 1000):.1f} km"
-                    aircraft_screen_coords.append((px, py, label, mag_heading))
+                    # Mirror heading as well so plane points correctly
+                    heading = mag_heading if mag_heading is not None else 0.0
+                    if MIRROR_EW: heading = (360.0 - heading) % 360.0
+
+                    label = (
+                        f"{flight}\n"
+                        f"alt:{int(alt)} m\n"
+                        f"gs:{int(gs)} km/h\n"
+                        f"hdg:{int(mag_heading)}\n"
+                        f"dist:{(dist // 1000):.1f} km"
+                    )
+
+                    aircraft_screen_coords.append((px, py, label, heading))
+
         except Exception as e:
             print("Aircraft JSON read error:", e)
-        # 
+
+        # Draw aircraft
         for px, py, label, heading in aircraft_screen_coords:
-            draw_plane(img_8bit, (px, py), heading - AZIMUTH_OFFSET_DEG, scale=0.25)
-            # Split label into lines
-            lines = label.split("\n")
-            for i, line in enumerate(lines):
-                cv2.putText(img_8bit, line, (px + 10, py + 20 + i * 15), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 0, 128), 1, cv2.LINE_AA)
+            draw_plane(img_8bit, (px, py), heading - AZIMUTH_OFFSET_DEG, scale=0.5)
+            # Better readable text box
+            draw_text_box(img_8bit, label, (px + 10, py + 20))
 
     cv2.imshow(window_title, img_8bit)
     if debug: print(f"total compute FPS: {1 / (time.perf_counter() - global_time):.2f}")

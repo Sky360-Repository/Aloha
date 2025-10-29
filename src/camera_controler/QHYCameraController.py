@@ -640,12 +640,15 @@ class QHYCameraController:
     
     def set_histogram_sampling(self, histogram_sampling):
         self.histogram_sampling = histogram_sampling
+        
     
     def set_histogram_dark_point(self, histogram_dark_point):
         self.histogram_dark_point = histogram_dark_point
+        
     
     def set_histogram_bright_point(self, histogram_bright_point):
         self.histogram_bright_point = histogram_bright_point
+        
 
     def close(self):
         # Stop live camera
