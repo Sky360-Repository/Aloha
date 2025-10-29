@@ -55,14 +55,16 @@ def QHYCamera2ecal(param_queue, status_queue):
             protobuf_message.height = qhy_camera.get_shape()[0]
             protobuf_message.bit_per_pixel = 16
             protobuf_message.raw_image = frame.tobytes()
-            protobuf_message.time_stamp = int(time.time() * 1.0e6)
+            #protobuf_message.time_stamp = int(time.time() * 1.0e6)
+            timestamp_sec = qhy_camera.metadata_buffer[qhy_camera.frame_index][0]
+            protobuf_message.time_stamp = int(timestamp_sec * 1.0e6)
 
             # Send the message to the topic this publisher was created for
             proto_snd.send(protobuf_message)
 
             # send status message
             status_message = {
-                'pulse_time': time.time(),
+                'pulse_time': timestamp_sec,
                 'exposure': qhy_camera.get_exposure(),
                 'gain': qhy_camera.get_gain(),
                 'temperature': qhy_camera.get_temperature()
