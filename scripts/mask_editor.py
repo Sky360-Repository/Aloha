@@ -42,7 +42,7 @@ PEN_RADIUS_DEFAULT = 50
 TRANSPARENCY_DEFAULT = 40
 UNDO_STACK_SIZE = 20
 
-MASK_FILENAME = "mask.png"
+MASK_FILENAME = "../scripts/mask.png"
 
 # ------------------- Shared memory helpers -------------------
 def attach_shared_memory():
@@ -547,6 +547,7 @@ def main():
 
     try:
         idx = get_newest_index(metadata_buffer)
+        #print(f"Index: {idx}")
         img16 = frame_buffer[idx]
     except Exception as e:
         try:
@@ -563,8 +564,8 @@ def main():
         deb = cv2.cvtColor(img16, cv2.COLOR_BayerRG2RGB)
     except Exception:
         deb = cv2.cvtColor(img16, cv2.COLOR_GRAY2RGB)
-    img8 = cv2.convertScaleAbs(deb, alpha=255.0 / 65535.0)
-    img_rgb = cv2.cvtColor(img8, cv2.COLOR_BGR2RGB)
+    
+    img_rgb = cv2.convertScaleAbs(deb, alpha=255.0 / 4095.0)
 
     # prepare display-sized background (we keep this for simplicity)
     disp = Image.fromarray(img_rgb).resize((DISPLAY_SIZE, DISPLAY_SIZE), resample=Image.BILINEAR)
