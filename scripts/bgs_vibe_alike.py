@@ -19,7 +19,7 @@ FRAME_SHAPE = (FULL_SHAPE[0] // DOWNSAMPLE, FULL_SHAPE[1] // DOWNSAMPLE)
 PIXEL_SIZE = 2
 HISTORY_LEN = 16
 FG_HISTORY_LEN = 5
-MATCH_THRESHOLD = 320  # [0..4095] multiple of 16
+MATCH_THRESHOLD = 640  # [0..4095] multiple of 16
 REQUIRED_MATCHES = 2
 USE_SMOOTHING = False
 SMOOTHING_DECAY = 0.9  # exponential smoothing factor
@@ -28,6 +28,11 @@ window_title = "Live BGS viewer - press 'q' to quit."
 morph_open = 3
 morph_close = 3
 dark_threshold = 16
+
+# AE stability detection
+AE_STABLE_TOLERANCE_EXPOSURE = 1  # relative difference tolerance (1%)
+AE_STABLE_TOLERANCE_GAIN = 0.1      # relative difference tolerance (1%)
+AE_STABLE_REQUIRED_FRAMES = 5        # frames required to be considered stable
 
 # Debugging
 debug = False
@@ -45,9 +50,6 @@ if raw_mask is None:
 # Convert to binary and downscale
 raw_mask = np.where(raw_mask == 0, 0, 1).astype(np.uint8)
 mask_small = cv2.resize(raw_mask, (FRAME_SHAPE[1], FRAME_SHAPE[0]), interpolation=cv2.INTER_NEAREST).astype(np.uint8)
-
-# TODO
-# adjust to current exposure and gain changes
 
 # FG smoothing
 fg_mask_history = deque(maxlen=FG_HISTORY_LEN)
@@ -125,6 +127,11 @@ def update_stable_mask(stable_fg_mask, vote_mask, decay, mask):
 def get_newest_index(timestamps: np.ndarray) -> int:
     return int(np.argmax(timestamps))
 
+def reset_history():
+    for i in range(HISTORY_LEN):
+        history[:, :, i] = frame  # reset with current frame
+    return
+
 # Create shared memory for final mask output
 mask_frame_shape = (RING_SIZE, *FRAME_SHAPE)
 mask_frame_bytes = np.prod(mask_frame_shape) * np.dtype(np.uint8).itemsize
@@ -164,16 +171,21 @@ var_threshold = MATCH_THRESHOLD
 num_fg_pixels = 0.0
 
 scales = [
-    (20.0, 1, 9),
-    (10.0, 1, 9),
-    (5.0, 1, 9),
-    (1.0, 1, 7),
-    (0.1, 1, 5),
-    (0.01, 1, 3),
+    (20.0, 9, 1),
+    (10.0, 9, 1),
+    (5.0, 4, 1),
+    (1.0, 2, 1),
+    (0.1, 1, 1),
+    (0.01, 1, 1),
     (0.0, 1, 1),
 ]
 
 try:
+    prev_exposure = None
+    prev_gain = None
+    ae_stable_counter = 0
+    ae_stable = False
+
     while True:
         timestamps = meta_np["timestamp"]
         if LIVE_MODE:
@@ -191,15 +203,40 @@ try:
         prev_latest_idx = current_idx
         start_time = time.perf_counter()
 
+        # --- Auto-exposure stability tracking ---
+        curr_exposure = meta_np["exposure"][current_idx]
+        curr_gain = meta_np["gain"][current_idx]
+
+        if prev_exposure is None:
+            prev_exposure = curr_exposure
+            prev_gain = curr_gain
+
+        exp_diff = abs(curr_exposure - prev_exposure)
+        gain_diff = abs(curr_gain - prev_gain)
+
+        if exp_diff < AE_STABLE_TOLERANCE_EXPOSURE and gain_diff < AE_STABLE_TOLERANCE_GAIN:
+            ae_stable_counter += 1
+        else:
+            ae_stable_counter = 0
+
+        ae_stable = ae_stable_counter >= AE_STABLE_REQUIRED_FRAMES
+
+        # Refresh history if AE changed significantly
+        if not ae_stable and ae_stable_counter == 0:
+            print(f"AE change detected (exp={curr_exposure:.3f}, gain={curr_gain:.3f}) → refreshing history.")
+            reset_history()
+
+        prev_exposure = curr_exposure
+        prev_gain = curr_gain
+
         # Precompute random update indices
         if debug: proc_time = time.perf_counter()
         rand_indices = np.random.randint(HISTORY_LEN, size=FRAME_SHAPE, dtype=np.uint8)
         if debug: print(f"random buffer creation: {(time.perf_counter() - proc_time):.4f}s")
-        
+
         # Dynamic MATCH_THRESHOLD depending on num_fg_pixels
         for limit, m_open, m_close in scales:
             if num_fg_pixels > limit:
-                #var_threshold = MATCH_THRESHOLD * factor
                 morph_open = m_open
                 morph_close = m_close
                 break
@@ -207,7 +244,15 @@ try:
         # Background subtraction
         if debug: proc_time = time.perf_counter()
         update_toggle = not update_toggle
-        fg_mask, history = process_frame(frame, history, var_threshold, REQUIRED_MATCHES, update_toggle, rand_indices, mask_small)
+        fg_mask, history = process_frame(
+            frame,
+            history,
+            var_threshold,
+            REQUIRED_MATCHES,
+            update_toggle and ae_stable,  # pause updates during AE changes
+            rand_indices,
+            mask_small
+        )
         if debug: print(f"BGS compute: {(time.perf_counter() - proc_time):.4f}s")
 
         # Morphological noise reduction
@@ -233,9 +278,9 @@ try:
             final_mask = fg_mask.copy()
 
         if debug: print(f"smoothing compute: {(time.perf_counter() - proc_time):.4f}s")
-        
+
         num_fg_pixels = np.count_nonzero(final_mask) / final_mask.size * 100
-        print(f"BGS: Index={current_idx} Processing time={(time.perf_counter() - start_time):.4f}s Mask pixels={num_fg_pixels:.4f}% Threshold={int(var_threshold)}")
+        print(f"BGS: Index={current_idx} AE_stable={ae_stable} Processing time={(time.perf_counter() - start_time):.4f}s Mask pixels={num_fg_pixels:.4f}% Threshold={int(var_threshold)}")
 
         # Apply static mask and write final result to SHM
         final_mask[mask_small == 0] = 0
@@ -248,6 +293,5 @@ finally:
     image_shm.close()
     meta_shm.close()
     mask_shm.close()
-    #cv2.destroyAllWindows()
     print("Cleaned up.")
 

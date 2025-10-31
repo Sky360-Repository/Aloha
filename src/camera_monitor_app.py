@@ -34,14 +34,15 @@ DEFAULT_EXPOSURE_MIN = 0
 DEFAULT_EXPOSURE_MAX = 200000
 DEFAULT_GAIN_MIN = 1.0
 DEFAULT_GAIN_MAX = 30.0
-DEFAULT_EXPOSURE_MIN_STEP = 50
-DEFAULT_GAIN_MIN_STEP = 0.2
+DEFAULT_EXPOSURE_MIN_STEP = 1
+DEFAULT_GAIN_MIN_STEP = 0.1
 DEFAULT_COMPENSATION_FACTOR = 0.62
 DEFAULT_TARGET_TEMPERATURE = -20.0 # [°C]
 DEFAULT_HISTOGRAM_SAMPLING = 512
 DEFAULT_HISTOGRAM_DARK_POINT = 5
 DEFAULT_HISTOGRAM_BRIGHT_POINT = 507
 
+"""
 def view_ecal_video():
     # Set process name
     set_process_name(f"eCAL viewer on {QHY_CHANNEL_NAME}")
@@ -67,6 +68,7 @@ def view_ecal_video():
 
     # When everything done, release the capture
     cv2.destroyAllWindows()
+"""
 
 class CameraMonitorApp:
 
@@ -91,7 +93,7 @@ class CameraMonitorApp:
         left_frame.grid(row=0, column=0, padx=10, pady=5, sticky="nsew")
         self.left_frame = left_frame
 
-        right_frame = tk.Frame(root)
+        right_frame = tk.Frame(root, bg='#3399FF')
         right_frame.grid(row=0, column=1, padx=10, pady=5, sticky="nsew")
         self.right_frame = right_frame
 
@@ -103,8 +105,8 @@ class CameraMonitorApp:
 
 
         # UI elements
-        #self.timestamp_var = tk.DoubleVar(value=1000000000000000)
-        self.timestamp_var = tk.StringVar(value="0000-00-00 00:00:00.000 UTC")
+        self.date_var = tk.StringVar(value="0000-00-00")
+        self.time_var = tk.StringVar(value="00:00:00.000 UTC")
         self.temp_var = tk.DoubleVar(value=0.0)
         self.gain_var = tk.DoubleVar(value=0.0)
         self.exposure_var = tk.DoubleVar(value=0.0)
@@ -132,74 +134,82 @@ class CameraMonitorApp:
 
         # Row 0
         ttk.Label(left_frame, text="Timestamp:").grid(row=0, column=0, padx=5, pady=5, sticky='w'+'e'+'n'+'s')
-        ttk.Label(left_frame, textvariable=self.timestamp_var).grid(row=0, column=1, padx=5, pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Label(left_frame, textvariable=self.date_var).grid(row=0, column=1, padx=5, pady=5,  sticky='w'+'e'+'n'+'s')
         
         # Row 1
-        ttk.Label(left_frame, text="Temperature [°C]:").grid(row=1, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
-        ttk.Label(left_frame, textvariable=self.temp_var).grid(row=1, column=1, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Label(left_frame, textvariable=self.time_var).grid(row=1, column=1, padx=5, pady=5,  sticky='w'+'e'+'n'+'s')
         
         # Row 2
-        ttk.Label(left_frame, text="Gain [dB]:").grid(row=2, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
-        ttk.Label(left_frame, textvariable=self.gain_var).grid(row=2, column=1, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Label(left_frame, text="Temperature [°C]:").grid(row=2, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Label(left_frame, textvariable=self.temp_var).grid(row=2, column=1, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         
         # Row 3
-        ttk.Label(left_frame, text="Exposure [µs]:").grid(row=3, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
-        ttk.Label(left_frame, textvariable=self.exposure_var).grid(row=3, column=1, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Label(left_frame, text="Gain [dB]:").grid(row=3, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Label(left_frame, textvariable=self.gain_var).grid(row=3, column=1, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         
         # Row 4
-        ttk.Label(left_frame, text="").grid(row=4, column=0, padx=5, pady=5, sticky='w'+'e'+'n'+'s')
+        ttk.Label(left_frame, text="Exposure [µs]:").grid(row=4, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Label(left_frame, textvariable=self.exposure_var).grid(row=4, column=1, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         
         # Row 5
-        ttk.Button(left_frame, text="Close QHY", command=self.close_qhy).grid(row=5, column=0)
-        ttk.Button(left_frame, text="Reset QHY", command=self.reset_qhy).grid(row=5, column=1)
+        ttk.Label(left_frame, text="").grid(row=5, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')   
         
         # Row 6        
-        self.view_button = ttk.Button(left_frame, text="View QHY image", command=self.view_qhy_image)
-        self.view_button.grid(row=6, column=0, columnspan=2)
+        ttk.Button(left_frame, text="Close QHY", command=self.close_qhy, width=15).grid(row=6, column=0)
+        ttk.Button(left_frame, text="Reset QHY", command=self.reset_qhy, width=15).grid(row=6, column=1)
+        
+        # Row 7
+        self.view_button = ttk.Button(left_frame, text="View QHY Image", command=self.view_qhy_image, width=15)
+        self.view_button.grid(row=7, column=0)
+        self.mask_editor_button = ttk.Button(left_frame, text="Mask Editor", command=self.edit_mask, width=15)
+        self.mask_editor_button.grid(row=7, column=1)
         
         ### Right Frame
         
         # Row 0
-        ttk.Label(right_frame, text="target_brightness:").grid(row=0, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Label(right_frame, text="target_brightness:", background='#3399FF').grid(row=0, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Entry(right_frame, textvariable=self.target_brightness_var, width=6).grid(row=0, column=1, sticky='w')
-        ttk.Label(right_frame, text="target_temperature:").grid(row=0, column=2, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Label(right_frame, text="target_temperature:", background='#3399FF').grid(row=0, column=2, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Entry(right_frame, textvariable=self.target_temperature_var, width=6).grid(row=0, column=3, sticky='w')
         
         # Row 1
-        ttk.Label(right_frame, text="target_gain:").grid(row=1, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Label(right_frame, text="target_gain:", background='#3399FF').grid(row=1, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Entry(right_frame, textvariable=self.target_gain_var, width=6).grid(row=1, column=1, sticky='w')
-        ttk.Label(right_frame, text="compensation_factor:").grid(row=1, column=2, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Label(right_frame, text="compensation_factor:", background='#3399FF').grid(row=1, column=2, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Entry(right_frame, textvariable=self.compensation_factor_var, width=6).grid(row=1, column=3, sticky='w')
         
         # Row 2
-        ttk.Label(right_frame, text="exposure_min:").grid(row=2, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Label(right_frame, text="exposure_min:", background='#3399FF').grid(row=2, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Entry(right_frame, textvariable=self.exposure_min_var, width=6).grid(row=2, column=1, sticky='w')
-        ttk.Label(right_frame, text="exposure_max:").grid(row=2, column=2, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Label(right_frame, text="exposure_max:", background='#3399FF').grid(row=2, column=2, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Entry(right_frame, textvariable=self.exposure_max_var, width=6).grid(row=2, column=3, sticky='w')
-        ttk.Label(right_frame, text="exposure_min_step:").grid(row=2, column=4, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Label(right_frame, text="exposure_min_step:", background='#3399FF').grid(row=2, column=4, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Entry(right_frame, textvariable=self.exposure_min_step_var, width=6).grid(row=2, column=5, sticky='w')
         
         # Row 3
-        ttk.Label(right_frame, text="gain_min:").grid(row=3, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Label(right_frame, text="gain_min:", background='#3399FF').grid(row=3, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Entry(right_frame, textvariable=self.gain_min_var, width=6).grid(row=3, column=1, sticky='w')
-        ttk.Label(right_frame, text="gain_max:").grid(row=3, column=2, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Label(right_frame, text="gain_max:", background='#3399FF').grid(row=3, column=2, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Entry(right_frame, textvariable=self.gain_max_var, width=6).grid(row=3, column=3, sticky='w')
-        ttk.Label(right_frame, text="gain_min_step:").grid(row=3, column=4, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Label(right_frame, text="gain_min_step:", background='#3399FF').grid(row=3, column=4, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Entry(right_frame, textvariable=self.gain_min_step_var, width=6).grid(row=3, column=5, sticky='w')
         
         # Row 4
-        ttk.Label(right_frame, text="histogram_sampling:").grid(row=4, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Label(right_frame, text="histogram_sampling:", background='#3399FF').grid(row=4, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Entry(right_frame, textvariable=self.histogram_sampling_var, width=6).grid(row=4, column=1, sticky='w')
-        ttk.Label(right_frame, text="histogram_dark_point:").grid(row=4, column=2, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Label(right_frame, text="histogram_dark_point:", background='#3399FF').grid(row=4, column=2, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Entry(right_frame, textvariable=self.histogram_dark_point_var, width=6).grid(row=4, column=3, sticky='w')
-        ttk.Label(right_frame, text="histogram_bright_point:").grid(row=4, column=4, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        ttk.Label(right_frame, text="histogram_bright_point:", background='#3399FF').grid(row=4, column=4, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Entry(right_frame, textvariable=self.histogram_bright_point_var, width=6).grid(row=4, column=5, sticky='w')
         
         # Row 5
-        ttk.Button(right_frame, text="Apply Parameters", command=self.apply_parameters).grid(row=5, column=2)
+        ttk.Label(right_frame, text="", background='#3399FF').grid(row=5, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
 
         # Row 6
-        #ttk.Label(left_frame, text="").grid(row=6, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')      
+        ttk.Label(right_frame, text="", background='#3399FF').grid(row=6, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+        
+        # Row 7
+        ttk.Button(right_frame, text="Apply Parameters", command=self.apply_parameters, width=15).grid(row=7, column=2)
         
         ### Message Frame
         
@@ -208,11 +218,11 @@ class CameraMonitorApp:
         ttk.Label(msg_frame, textvariable=self.camera_msg, background='#600', foreground='#FFF').grid(row=0, column=1)
 
 
-
         # Start status polling
         self.running = True
         threading.Thread(target=self.status_listener, daemon=True).start()
         self.view_process = None
+        self.mask_edit_process = None
         # Poll process status
         self.check_process_status()
 
@@ -228,12 +238,12 @@ class CameraMonitorApp:
                     self.camera_msg.set("QHY is running")
                 else:
                     self.camera_msg.set("QHY crashed")
-                #self.timestamp_var.set(status_msg.time_stamp)
                 
-                # Convert UNIX timestamp (float or int) → formatted UTC string
+                # Convert UNIX timestamp (float or int) → formatted UTC strings
                 ts = status_msg.time_stamp / 1e6
-                ts_utc = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3] + " UTC"
-                self.timestamp_var.set(ts_utc)
+                dt_utc = datetime.fromtimestamp(ts, tz=timezone.utc)
+                self.date_var.set(dt_utc.strftime("%Y-%m-%d"))
+                self.time_var.set(dt_utc.strftime("%H:%M:%S.%f")[:-3] + " UTC")
                 
             time.sleep(0.1)
 
@@ -277,13 +287,30 @@ class CameraMonitorApp:
             self.view_button.state(['!disabled'])
 
 
+    def edit_mask(self):
+        if self.mask_edit_process and self.mask_edit_process.poll() is None:
+            self.support_msg.set("Mask Editor already running.")
+            return
+        self.mask_editor_button.state(['disabled'])
+        try:
+            mask_editor_script = os.path.join(os.path.dirname(__file__), "../scripts/mask_editor.py")
+            self.mask_edit_process = subprocess.Popen([sys.executable, mask_editor_script])
+        except Exception as e:
+            self.support_msg.set(f"Failed to start Mask Editor: {e}")
+            self.mask_editor_button.state(['!disabled'])
+            
+
     def check_process_status(self):
         if self.view_process:
             if self.view_process.poll() is not None:  # process ended
                 self.view_button.state(['!disabled']) # Re-enable
                 self.view_process = None
+        if self.mask_edit_process:
+            if self.mask_edit_process.poll() is not None:  # process ended
+                self.mask_editor_button.state(['!disabled']) # Re-enable
+                self.mask_edit_process = None
         self.left_frame.after(500, self.check_process_status)
-
+        
 
     def apply_parameters(self):
         params_message = self.params_proto_snd.get_message_type()

@@ -89,10 +89,10 @@ class AEController:
         self.target_gain = 22 # optimal value in terms of efficiency
         self.exposure_min = 0
         self.exposure_max = 200000
-        self.exposure_min_step = 50
+        self.exposure_min_step = 1
         self.gain_min = 1.0
         self.gain_max = 30.0
-        self.gain_min_step = 0.5
+        self.gain_min_step = 0.1
         self.target_brightness = 0.5
         self.compensation_factor = 0.62 # [0..1] amount of brightness_error to be compensated - to prevent from overshooting
         self.histogram_sampling = 512

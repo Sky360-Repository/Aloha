@@ -22,7 +22,7 @@ FRAME_HEIGHT = 3200
 FRAME_COUNT = 200
 BGS_DOWNSAMPLE = 2
 VIEWER_WINDOW = 3200
-AZIMUTH_OFFSET_DEG = 220
+AZIMUTH_OFFSET_DEG = 208
 FOV = 160.0
 
 AIRCRAFT_JSON_PATH = os.path.expanduser("~/dump1090-master/dump1090/public_html/data/aircraft.json")
@@ -358,6 +358,15 @@ def draw_cardinal(img, poly, target_az_deg, az_offset_deg, scale=2.0, color=(0,0
     cv2.fillPoly(img, [pts], color, lineType=cv2.LINE_AA)
 
 
+def heading_to_compass(heading_deg):
+    directions = [
+        "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+        "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"
+    ]
+    idx = int((heading_deg + 11.25) / 22.5) % 16
+    return directions[idx]
+
+
 def get_newest_index():
     timestamps = metadata_buffer[:, 0]
     newest = np.argmax(timestamps)
@@ -424,7 +433,7 @@ def show_frame(index):
         mask = mask_buffer[index]
         num_fg_pixels = np.count_nonzero(mask) / mask.size * 100
         mask_resized = cv2.resize(mask, (img_8bit.shape[1], img_8bit.shape[0]), interpolation=cv2.INTER_NEAREST)
-        img_8bit[mask_resized != 0] = [0, 0, 255]
+        img_8bit[mask_resized != 0] = [0, 0, 200]
 
     if info_view:
         timestamp = metadata_buffer[index][0]  # float seconds from time.time()
@@ -432,12 +441,12 @@ def show_frame(index):
         timestamp_str = dt.strftime('%Y-%m-%d %H:%M:%S.') + f"{dt.microsecond // 100:04d} UTC"
         
         # Data
-        cv2.putText(img_8bit, f"Index: {index}", (40, 70), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 3, cv2.LINE_AA)
-        cv2.putText(img_8bit, f"Timestamp: {timestamp_str}", (40, 110), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 3, cv2.LINE_AA)
-        cv2.putText(img_8bit, f"Exposure: {int(metadata_buffer[index][1])}us", (40, 150), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 3, cv2.LINE_AA)
-        cv2.putText(img_8bit, f"Gain: {metadata_buffer[index][2]:.2f}dB", (40, 190), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 3, cv2.LINE_AA)
-        cv2.putText(img_8bit, f"Gamma: {gamma:.1f}", (40, 230), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 3, cv2.LINE_AA)
-        if bgs_view: cv2.putText(img_8bit, f"Mask pixels: {num_fg_pixels:.4f}%", (40, 270), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 255, 0), 3, cv2.LINE_AA)
+        cv2.putText(img_8bit, f"Index: {index}", (40, 70), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 3, cv2.LINE_AA)
+        cv2.putText(img_8bit, f"Timestamp: {timestamp_str}", (40, 110), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 3, cv2.LINE_AA)
+        cv2.putText(img_8bit, f"Exposure: {int(metadata_buffer[index][1])}us", (40, 150), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 3, cv2.LINE_AA)
+        cv2.putText(img_8bit, f"Gain: {metadata_buffer[index][2]:.2f}dB", (40, 190), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 3, cv2.LINE_AA)
+        cv2.putText(img_8bit, f"Gamma: {gamma:.1f}", (40, 230), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 3, cv2.LINE_AA)
+        if bgs_view: cv2.putText(img_8bit, f"Mask pixels: {num_fg_pixels:.4f}%", (40, 270), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 3, cv2.LINE_AA)
 
         # Keys
         cv2.putText(img_8bit, "a ...ADSB", (40, 2820), cv2.FONT_HERSHEY_SIMPLEX, FONT_SIZE, (0, 0, 128), 3, cv2.LINE_AA)
@@ -514,7 +523,7 @@ def show_frame(index):
                         f"{flight}\n"
                         f"alt:{int(alt)} m\n"
                         f"gs:{int(gs)} km/h\n"
-                        f"hdg:{int(mag_heading)}\n"
+                        f"hdg:{int(mag_heading)} {heading_to_compass(mag_heading)}\n"
                         f"dist:{(dist // 1000):.1f} km"
                     )
 
@@ -549,48 +558,77 @@ cv2.namedWindow(window_title, cv2.WINDOW_NORMAL)
 cv2.resizeWindow(window_title, 1080, 1080)
 
 while True:
-    key = cv2.waitKey(10) & 0xFF
+    if paused:
+        # Blocking wait for key (never misses input)
+        key = cv2.waitKey(0) & 0xFF
+    else:
+        key = cv2.waitKey(10) & 0xFF  # non-blocking short wait
 
-    if not paused:
+    # --- global toggles ---
+    if key == ord('2'):
+        paused = not paused
+        print("Paused =", paused)
+        if paused:
+            show_frame(current_index)
+        continue
+
+    if key == ord('a'):
+        adsb_view = not adsb_view
+        print(f"ADSB = {adsb_view}")
+        show_frame(current_index)
+        continue
+
+    if key == ord('b'):
+        bgs_view = not bgs_view
+        print(f"BGS = {bgs_view}")
+        show_frame(current_index)
+        continue
+
+    if key == ord('h'):
+        humanRGB = not humanRGB
+        print(f"humanRGB = {humanRGB}")
+        show_frame(current_index)
+        continue
+
+    if key == ord('i'):
+        info_view = not info_view
+        print(f"INFO = {info_view}")
+        show_frame(current_index)
+        continue
+
+    if key == ord('+'):
+        gamma = min(GAMMA_MAX, gamma + GAMMA_INC)
+        print(f"Gamma increased to {gamma:.1f}")
+        show_frame(current_index)
+        continue
+
+    if key == ord('-'):
+        gamma = max(GAMMA_MIN, gamma - GAMMA_INC)
+        print(f"Gamma decreased to {gamma:.1f}")
+        show_frame(current_index)
+        continue
+
+    if key == ord('q'):
+        break
+
+    # --- playback control ---
+    if paused:
+        # Step through frames manually
+        if key == ord('3'):
+            current_index = (current_index + 1) % FRAME_COUNT
+            show_frame(current_index)
+        elif key == ord('1'):
+            current_index = (current_index - 1) % FRAME_COUNT
+            show_frame(current_index)
+    else:
+        # Live mode (follow newest frames)
         newest_index = (get_newest_index() - 3) % FRAME_COUNT
         if metadata_buffer[newest_index][0] != last_timestamp:
             current_index = newest_index
             last_timestamp = metadata_buffer[current_index][0]
             frame_counter += 1
-            show_frame(current_index) # 0.03-0.06s
-    else:
-        if key == ord('3') or key == 83:  # Right arrow or 'd'
-            current_index = (current_index + 1) % FRAME_COUNT
-            show_frame(current_index)
-        elif key == ord('1') or key == 81:  # Left arrow or 'a'
-            current_index = (current_index - 1) % FRAME_COUNT
             show_frame(current_index)
 
-    # Handle toggle and quit
-    if key == ord('2'):
-        paused = not paused
-    elif key == ord('a'):
-        adsb_view = not adsb_view
-        print(f"ADSB = {adsb_view}")
-    elif key == ord('h'):
-        humanRGB = not humanRGB
-        print(f"humanRGB = {humanRGB}")
-    elif key == ord('i'):
-        info_view = not info_view
-        print(f"INFO = {info_view}")
-    elif key == ord('+'):
-        gamma = min(GAMMA_MAX, gamma + GAMMA_INC)
-        print(f"Gamma increased to {gamma:.1f}")
-    elif key == ord('-'):
-        gamma = max(GAMMA_MIN, gamma - GAMMA_INC)
-        print(f"Gamma decreased to {gamma:.1f}")
-    elif key == ord('b'):
-        bgs_view = not bgs_view
-        print(f"BGS = {bgs_view}")
-    elif key == ord('q'):
-        break
-
-    time.sleep(0.05)
 
 # Cleanup
 cv2.destroyAllWindows()
