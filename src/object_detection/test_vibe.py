@@ -9,11 +9,11 @@ import numpy as np
 import argparse
 
 from skimage import morphology
-from gaussian_mix_models import GaussianMixModels
+from vibe import ViBe
 from timer import Timer
 
 
-def main(camera_id: np.uint8 = 0, nbr_gaussians: np.uint8 = 5, learning_factor: np.float32 = 0.5, is_color: bool = True):
+def main(camera_id: np.uint8 = 0, nbr_backgrounds: np.uint8 = 20, min_matches: np.uint8 = 2):
     cap = cv2.VideoCapture(camera_id)
 
     # Set auto exposure to off (mode 1) or manual mode (mode 0.75)
@@ -36,19 +36,16 @@ def main(camera_id: np.uint8 = 0, nbr_gaussians: np.uint8 = 5, learning_factor: 
         return
 
     # Resize just for demo so that is faster to learn the background
-    frame = cv2.resize(frame, (800, 600))
+    #frame = cv2.resize(frame, (800, 600))
+
     cv2.namedWindow("Original", cv2.WINDOW_NORMAL)
     cv2.namedWindow("Foreground (abs diff)", cv2.WINDOW_NORMAL)
-    for i in range(nbr_gaussians):
-        cv2.namedWindow(f"{i} - Background (mean)", cv2.WINDOW_NORMAL)
+    #for i in range(nbr_backgrounds):
+    #    cv2.namedWindow(f"{i} - Background (mean)", cv2.WINDOW_NORMAL)
 
-    depth=3
-    if not is_color:
-        depth = 1
-
-    height, width, _ = frame.shape
+    height, width, depth = frame.shape
     with Timer('gmm init'):
-            gmm = GaussianMixModels((height, width, depth), nbr_gaussians, learning_factor)
+            vibe_bg = ViBe((height, width, depth), nbr_backgrounds, min_matches)
 
     while True:
         ret, frame = cap.read()
@@ -56,19 +53,15 @@ def main(camera_id: np.uint8 = 0, nbr_gaussians: np.uint8 = 5, learning_factor: 
             print("Failed to capture.")
             return
         # Resize just for demo so that is faster to learn the background
-        frame = cv2.resize(frame, (800, 600))
-        if not is_color:
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        # frame = cv2.resize(frame, (800, 600))
 
         # Gaussian Blur - also for demo so that is faster to learn the background
         frame = cv2.GaussianBlur(frame, (7, 7), 0)
         frame_u8 = frame.astype(np.uint8)
         frame_u8_normalized = frame_u8
-        if is_color:
-            frame_u8_normalized = frame_u8[:, :, :3]  # Make sure it's 3 channels
 
         with Timer('gmm get_difference_mask'):
-            foreground = gmm.get_difference_mask(frame_u8)
+            foreground = vibe_bg.get_difference_mask(frame_u8)
 
         # Morphological cleaning (remove small noise and fill holes)
         #masks_bin = foreground.astype(bool)
@@ -79,13 +72,13 @@ def main(camera_id: np.uint8 = 0, nbr_gaussians: np.uint8 = 5, learning_factor: 
         #foreground = cleaned.astype(np.uint8) * 255
 
         with Timer('gmm update'):
-            gmm.update(frame_u8_normalized)
+            vibe_bg.update(frame_u8_normalized)
 
         cv2.imshow("Original", frame_u8)
         cv2.imshow("Foreground (abs diff)", foreground)
-        for i in range(nbr_gaussians):
-            background = np.clip((gmm.mean[..., i] + 0.5) * 255, 0, 255).astype(np.uint8)
-            cv2.imshow(f"{i} - Background (mean)", background)
+        #for i in range(nbr_backgrounds):
+        #    background = np.clip((vibe_bg.bg_buffer[..., i] + 0.5) * 255, 0, 255).astype(np.uint8)
+        #    cv2.imshow(f"{i} - Background (mean)", background)
 
         # Esc key to stop
         if cv2.waitKey(1) & 0xFF == 27:
@@ -98,30 +91,25 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--camera_id", required=False,
                     help="Specify Camera ID: python test_gmm.py --camera_id 0")
-    ap.add_argument("--nbr_gaussians", required=False,
-                    help="Specify Camera ID: python test_gmm.py --nbr_gaussians 5")
-    ap.add_argument("--learning_factor", required=False, type=float,
-                    help="Specify Camera ID: python test_gmm.py --learning_factor 0.5")
-    ap.add_argument("--is_color", required=False,
-                    help="Select True for color and False for gray : python test_gmm.py --is_color True")
+    ap.add_argument("--nbr_backgrounds", required=False,
+                    help="Specify Camera ID: python test_gmm.py --nbr_backgrounds 20")
+    ap.add_argument("--min_matches", required=False, type=float,
+                    help="Specify Camera ID: python test_gmm.py --min_matches 2")
     args = vars(ap.parse_args())
 
     # Default configurations
     camera_id = 0
-    is_color = True
-    nbr_gaussians = 7
-    learning_factor = 0.1
+    nbr_backgrounds = 20
+    min_matches = 2
 
-    print("\n\nDefault usage: python test_gmm.py --camera_id 0 --nbr_gaussians 5 --learning_factor 0.5 --is_color True")
+    print("\n\nDefault usage: python test_gmm.py --camera_id 0 --nbr_backgrounds 20 --min_matches 2")
     print("\nPress 'Esc' key to stop\n")
 
     if args["camera_id"]:
         camera_id = int(args["camera_id"])
-    if args["is_color"]:
-        is_color = args["is_color"].lower() == "true"
-    if args["nbr_gaussians"]:
-        nbr_gaussians = int(args["nbr_gaussians"])
-    if args["learning_factor"]:
-        learning_factor = args["learning_factor"]
+    if args["nbr_backgrounds"]:
+        nbr_backgrounds = int(args["nbr_backgrounds"])
+    if args["min_matches"]:
+        min_matches = int(args["min_matches"])
 
-    main(camera_id, nbr_gaussians, learning_factor, is_color)
+    main(camera_id, nbr_backgrounds, min_matches)

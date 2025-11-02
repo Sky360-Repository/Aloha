@@ -7,22 +7,10 @@
 import cv2
 import numpy as np
 import argparse
-import time
 
 from skimage import morphology
 from frame_difference import FrameDifference
-
-class Timer(object):
-    def __init__(self, name=None):
-        self.name = name
-
-    def __enter__(self):
-        self.tstart = time.time()
-
-    def __exit__(self, type, value, traceback):
-        if self.name:
-            print('[%s]' % self.name,)
-        print('Elapsed: %s' % (time.time() - self.tstart))
+from timer import Timer
 
 
 def main(camera_id: np.uint8 = 0, nbr_history_frame: np.uint8 = 2, is_color: bool = True):

@@ -13,6 +13,9 @@ from frame_difference import FrameDifference
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor
 
+from gaussian_mix_models import GaussianMixModels
+from vibe import ViBe
+
 class ObjectDetector:
     @dataclass
     class Config:
@@ -23,6 +26,10 @@ class ObjectDetector:
         mag_frame_dif_th: float = 0.1
         ang_frame_dif_th: float = 0.2
         rgb_frame_dif_th: float = 0.1
+        nbr_gaussians: np.uint8 = 7
+        learning_factor: np.float32 = 0.5
+        nbr_backgrounds: np.uint8 = 20
+        min_matches: np.uint8 = 2
 
     def __init__(self, rgb_img_size, config: Config = None):
         if config is None:
@@ -36,6 +43,9 @@ class ObjectDetector:
         self.fd_rgb = FrameDifference((img_height, img_width, img_depth), config.nbr_history_frame)
         self.config = config
 
+        self.gmm_bg = GaussianMixModels((img_height, img_width, img_depth), self.config.nbr_gaussians, self.config.learning_factor)
+        self.vibe_bg = ViBe((img_height, img_width, img_depth), self.config.nbr_backgrounds, self.config.min_matches)
+
     # TODO: Option to load parameters from json
     """
     @staticmethod
@@ -47,8 +57,11 @@ class ObjectDetector:
     """
     def process_frame(self, rgb_image: np.ndarray):
 
-        # Features from extract_gradients
+        # Gaussian Blur - also for demo so that is faster to learn the background
+        blured_img = cv2.GaussianBlur(rgb_image, (7, 7), 0)
         gray_img = cv2.cvtColor(rgb_image, cv2.COLOR_BGR2GRAY)
+
+        # Features from extract_gradients
         grad_magnitude, grad_angle = self.extract_gradients(gray_img)
 
         with ThreadPoolExecutor() as executor:
@@ -56,10 +69,12 @@ class ObjectDetector:
                 'mag': executor.submit(self.fd_mag.process_frame, grad_magnitude, self.config.mag_frame_dif_th),
                 'ang': executor.submit(self.fd_ang.process_frame, grad_angle, self.config.ang_frame_dif_th),
                 'rgb': executor.submit(self.fd_rgb.process_frame, rgb_image, self.config.rgb_frame_dif_th),
-                'dog': executor.submit(self.detect_dots_dog, gray_img)
+                'dog': executor.submit(self.detect_dots_dog, gray_img),
+                'gmm': executor.submit(self.gmm_bg.get_difference_mask, blured_img),
+                'vibe': executor.submit(self.vibe_bg.get_difference_mask, blured_img)
             }
 
-        # Gradint based detector
+        # Gradient based detector
         mag_mask = futures['mag'].result()
         mag_mask = self.validate_mask(mag_mask, self.config.max_coverage)
 
@@ -73,13 +88,33 @@ class ObjectDetector:
         blobs_dog_mask = futures['dog'].result()
         blobs_dog_mask = self.clean(blobs_dog_mask, self.config.min_obj_size)
 
+        gmm_mask = futures['gmm'].result()
+        gmm_mask = self.validate_mask(gmm_mask, self.config.max_coverage)
+        vibe_mask = futures['vibe'].result()
+
         # TODO: add GMM and ViBe
+        # Fusion logic (TBD):
+        #   moving = fg_diff & (fg_vibe | fg_gmm)
+        #   static = (fg_vibe & fg_gmm) & ~fg_diff
+        #   ghosts = (fg_vibe ^ fg_gmm) & ~fg_diff
+        #   background = ~(fg_vibe | fg_gmm | fg_diff)
+
         # foreground_obj = GMM_mask & Vibe_mask
-        self.moving_obj = mag_mask | ang_mask | rgb_diff_mask
+        # self.moving_obj = mag_mask | ang_mask | rgb_diff_mask
         # TODO: add GMM and ViBe for static objects
         # static_obj = foreground_obj & ~moving_obj
         # TODO: add GMM and ViBe for foreground_obj
-        self.interest_obj = blobs_dog_mask # & foreground_obj
+        # self.interest_obj = blobs_dog_mask # & foreground_obj
+        self.mag_mask = mag_mask
+        self.ang_mask = ang_mask
+        self.rgb_diff_mask = rgb_diff_mask
+        self.blobs_dog_mask = blobs_dog_mask
+        self.gmm_mask = gmm_mask
+        self.vibe_mask = vibe_mask
+
+        # Update GMM and ViBe
+        self.gmm_bg.update(blured_img)
+        self.vibe_bg.update(blured_img)
 
     def validate_mask(self, mask: np.ndarray, max_coverage: float = 0.5) -> np.ndarray:
         if mask.ndim != 2:
@@ -128,8 +163,11 @@ class ObjectDetector:
         blur1 = cv2.GaussianBlur(gray, (0, 0), sigmaX=sigma1)
         blur2 = cv2.GaussianBlur(gray, (0, 0), sigmaX=sigma2)
 
+        # Use contrast of blurred images to decide polarity
+        is_high_contrast = (blur1.max() - blur1.min()) > (blur2.max() - blur2.min())
+
         # Difference of Gaussians
-        dog = blur1 - blur2
+        dog = blur2 - blur1 if is_high_contrast else blur1 - blur2
 
         # Threshold using Otsu
         thresh = filters.threshold_otsu(dog)
