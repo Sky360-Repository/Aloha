@@ -4,11 +4,11 @@
 #
 # ************************************************************************
 
-
 import numpy as np
 import warnings
 from concurrent.futures import ThreadPoolExecutor, Future
 import math
+
 
 class GaussianMixModels:
     def __init__(self, img_size, nbr_gaussians: np.uint8 = 7, learning_factor: np.float32 = 0.5):
@@ -36,7 +36,6 @@ class GaussianMixModels:
 
         print(f"Estimated frames to integrate ghosts: {self.get_update_rate()} frames (target 70% weight)")
 
-
     def update(self, image: np.ndarray, background_mask: np.ndarray = None, std_factor: float = 2.0) -> Future:
         # Initialize future if first time
         if not hasattr(self, 'previous_future') or self.previous_future.done():
@@ -52,8 +51,6 @@ class GaussianMixModels:
             pass  # Or log it / count skipped frames
 
         return self.previous_future
-
-
 
     def _threaded_update(self, image, background_mask, std_factor):
         image = (image.astype(np.float32) / 255.0) - 0.5
@@ -151,4 +148,3 @@ class GaussianMixModels:
             return n_frames
         except ZeroDivisionError:
             return float('inf')  # Unreachable if alpha is 0 (shouldn’t happen)
-

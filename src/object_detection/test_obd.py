@@ -1,20 +1,8 @@
 import cv2
 import numpy as np
 import argparse
-import time
 from object_detector import ObjectDetector
-
-class Timer(object):
-    def __init__(self, name=None):
-        self.name = name
-
-    def __enter__(self):
-        self.tstart = time.time()
-
-    def __exit__(self, type, value, traceback):
-        if self.name:
-            print('[%s]' % self.name, )
-        print('Elapsed: %s' % (time.time() - self.tstart))
+from timer import Timer
 
 def main(camera_id: np.uint8 = 0, nbr_history_frame: np.uint8 = 2):
     cap = cv2.VideoCapture(camera_id)
@@ -42,8 +30,12 @@ def main(camera_id: np.uint8 = 0, nbr_history_frame: np.uint8 = 2):
     # frame = cv2.resize(frame, (800, 600))
 
     cv2.namedWindow("Original", cv2.WINDOW_NORMAL)
-    cv2.namedWindow("moving_obj", cv2.WINDOW_NORMAL)
-    cv2.namedWindow("interest_obj", cv2.WINDOW_NORMAL)
+    cv2.namedWindow("mag_mask", cv2.WINDOW_NORMAL)
+    cv2.namedWindow("ang_mask", cv2.WINDOW_NORMAL)
+    cv2.namedWindow("rgb_diff_mask", cv2.WINDOW_NORMAL)
+    cv2.namedWindow("blobs_dog_mask", cv2.WINDOW_NORMAL)
+    cv2.namedWindow("gmm_mask", cv2.WINDOW_NORMAL)
+    cv2.namedWindow("vibe_mask", cv2.WINDOW_NORMAL)
 
     # Object detector
     od = ObjectDetector(frame.shape)
@@ -62,8 +54,12 @@ def main(camera_id: np.uint8 = 0, nbr_history_frame: np.uint8 = 2):
             od.process_frame(frame)
 
         cv2.imshow("Original", frame)
-        cv2.imshow("moving_obj", od.moving_obj.astype(np.uint8))
-        cv2.imshow("interest_obj", od.interest_obj.astype(np.uint8))
+        cv2.imshow("mag_mask", od.mag_mask.astype(np.uint8))
+        cv2.imshow("ang_mask", od.ang_mask.astype(np.uint8))
+        cv2.imshow("rgb_diff_mask", od.rgb_diff_mask.astype(np.uint8))
+        cv2.imshow("blobs_dog_mask", od.blobs_dog_mask.astype(np.uint8))
+        cv2.imshow("gmm_mask", od.gmm_mask.astype(np.uint8))
+        cv2.imshow("vibe_mask", od.vibe_mask.astype(np.uint8))
 
         # Esc key to stop
         if cv2.waitKey(1) & 0xFF == 27:
@@ -82,7 +78,7 @@ if __name__ == "__main__":
     args = vars(ap.parse_args())
 
     # Default configurations
-    camera_id = 2
+    camera_id = 0
     nbr_history_frames = 3
 
     print("\n\nDefault usage: python object_detector.py --camera_id 0 --nbr_history_frames 2")
