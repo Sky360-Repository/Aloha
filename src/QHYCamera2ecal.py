@@ -8,6 +8,8 @@ import time
 import multiprocessing as mp
 import cv2
 import argparse
+import os
+import numpy as np
 
 from ecal_lib.ecal_util.proto_receiver import ProtoReceiver
 from ecal_lib.ecal_util.proto_sender import ProtoSender
@@ -30,7 +32,10 @@ MAX_RESTART_ATTEMPTS = 3
 PULSE_TIMEOUT_SEC = 6
 INIT_PULSE_TIMEOUT_SEC = 35
 
+debug = True
+
 def QHYCamera2ecal(param_queue, status_queue):
+    if debug: print("[QHYCamera2ecal] PID", os.getpid(), "starting QHYCameraController...")
 
     # Set process name
     set_process_name(f"{QHY_CHANNEL_NAME} Broadcast")
@@ -40,56 +45,64 @@ def QHYCamera2ecal(param_queue, status_queue):
 
     # QHY Camera Controller
     qhy_camera = QHYCameraController()
+    if debug: print("[QHYCamera2ecal] QHYCameraController init done; sending initial heartbeat")
 
-    # Infinite loop - main_controller kills the process if it has to terminate
+    # Send initial pulse
+    status_queue.put({
+        'pulse_time': time.time(),
+        'exposure': qhy_camera.get_exposure(),
+        'gain': qhy_camera.get_gain(),
+        'temperature': qhy_camera.get_temperature()
+    })
+
     while True:
+        
+        # Find the index of the youngest (largest) timestamp
+        timestamps = qhy_camera.ring_buffer.metadata_buffer[:, 0] # all timestamps
+        latest_index = int(np.argmax(timestamps)) # index of the newest frame
+        timestamp_sec = timestamps[latest_index]
+        
         # Capture frame-by-frame
-        frame = qhy_camera.get_live_frame()
+        _ = qhy_camera.get_live_frame()
+        frame = qhy_camera.ring_buffer.frame_buffer[latest_index]
+        
+        # send status message
+        status_message = { 'pulse_time': timestamp_sec, 'exposure': qhy_camera.get_exposure(), 'gain': qhy_camera.get_gain(), 'temperature': qhy_camera.get_temperature() }
+        status_queue.put(status_message)
 
-        # Check if frame is not empty
+        # Only send the frame if it's actually available
         if frame is not None:
-
             # Access the protobuf type definition
             protobuf_message = proto_snd.get_message_type()
             protobuf_message.width = qhy_camera.get_shape()[1]
             protobuf_message.height = qhy_camera.get_shape()[0]
             protobuf_message.bit_per_pixel = 16
             protobuf_message.raw_image = frame.tobytes()
-            #protobuf_message.time_stamp = int(time.time() * 1.0e6)
-            timestamp_sec = qhy_camera.metadata_buffer[qhy_camera.frame_index][0]
             protobuf_message.time_stamp = int(timestamp_sec * 1.0e6)
-
+            
             # Send the message to the topic this publisher was created for
             proto_snd.send(protobuf_message)
 
-            # send status message
-            status_message = {
-                'pulse_time': timestamp_sec,
-                'exposure': qhy_camera.get_exposure(),
-                'gain': qhy_camera.get_gain(),
-                'temperature': qhy_camera.get_temperature()
-            }
-            status_queue.put(status_message)
-
-            # Maybe pass the not None check in the set function
-            while not param_queue.empty():
-                config_message = param_queue.get()
-                qhy_camera.set_target_brightness(config_message['target_brightness'])
-                qhy_camera.set_target_gain(config_message['target_gain'])
-                qhy_camera.set_exposure_min(config_message['exposure_min'])
-                qhy_camera.set_exposure_max(config_message['exposure_max'])
-                qhy_camera.set_gain_min(config_message['gain_min'])
-                qhy_camera.set_gain_max(config_message['gain_max'])
-                qhy_camera.set_exposure_min_step(config_message['exposure_min_step'])
-                qhy_camera.set_gain_min_step(config_message['gain_min_step'])
-                qhy_camera.set_compensation_factor(config_message['compensation_factor'])
-                qhy_camera.set_target_temperature(config_message['target_temperature'])
-                qhy_camera.set_histogram_sampling(config_message['histogram_sampling'])
-                qhy_camera.set_histogram_dark_point(config_message['histogram_dark_point'])
-                qhy_camera.set_histogram_bright_point(config_message['histogram_bright_point'])
+        # Process incoming configuration messages
+        while not param_queue.empty():
+            config_message = param_queue.get()
+            qhy_camera.set_target_brightness(config_message['target_brightness'])
+            qhy_camera.set_target_gain(config_message['target_gain'])
+            qhy_camera.set_exposure_min(config_message['exposure_min'])
+            qhy_camera.set_exposure_max(config_message['exposure_max'])
+            qhy_camera.set_gain_min(config_message['gain_min'])
+            qhy_camera.set_gain_max(config_message['gain_max'])
+            qhy_camera.set_exposure_min_step(config_message['exposure_min_step'])
+            qhy_camera.set_gain_min_step(config_message['gain_min_step'])
+            qhy_camera.set_compensation_factor(config_message['compensation_factor'])
+            qhy_camera.set_target_temperature(config_message['target_temperature'])
+            qhy_camera.set_histogram_sampling(config_message['histogram_sampling'])
+            qhy_camera.set_histogram_dark_point(config_message['histogram_dark_point'])
+            qhy_camera.set_histogram_bright_point(config_message['histogram_bright_point'])
 
     # Close the capture
     qhy_camera.close()
+
 
 def main_controller():
     mp.set_start_method("spawn")
@@ -107,7 +120,7 @@ def main_controller():
     params_proto_rec = ProtoReceiver(QHY_PARAMS_CHANNEL, PARAMS_MESSAGE_NAME, PARAMS_PROTO_FILE)
 
     def start_capture():
-        print("[Controller] Start QHY Camera")
+        if debug: print("[Controller] Start QHY Camera")
         proc = mp.Process(target=QHYCamera2ecal, args=(param_queue, status_queue))
         proc.start()
         return proc
@@ -165,7 +178,7 @@ def main_controller():
 
             # Pulse timeout check
             if is_reset_qyc_set or time.time() - last_pulse_time > pulse_timeout:
-                print(f"[Controller] No pulse for {pulse_timeout} sec — restarting Capture")
+                if debug: print(f"[Controller] No pulse for {pulse_timeout} sec — restarting Capture")
 
                 # Send the message to the topic
                 status_proto_message = status_proto_snd.get_message_type()
@@ -178,7 +191,7 @@ def main_controller():
 
                 restart_attempts += 1
                 if restart_attempts >= MAX_RESTART_ATTEMPTS:
-                    print("[Controller] Max restart attempts reached — check QHY Camera")
+                    if debug: print("[Controller] Max restart attempts reached — check QHY Camera")
                     break
 
                 capture_proc = start_capture()
@@ -187,20 +200,20 @@ def main_controller():
                 is_reset_qyc_set = False
 
             if is_close_qyc_set:
-                print(f"[Controller] Closing QHY")
+                if debug: print(f"[Controller] Closing QHY")
                 capture_proc.terminate()
                 break
 
             time.sleep(1)
 
         except KeyboardInterrupt:
-            print("[Controller] Closing QHY")
+            if debug: print("[Controller] Closing QHY")
             capture_proc.terminate()
             break
 
 if __name__ == "__main__":
 
-    print("\n\npython QHYCamera2ecal.py")
-    print("\n'ctrl+C' to stop\n")
+    if debug: print("\n\npython QHYCamera2ecal.py")
+    if debug: print("\n'ctrl+C' to stop\n")
 
     main_controller()
