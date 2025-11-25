@@ -1,3 +1,9 @@
+# \copyright    Sky360.org
+#
+# \brief        Camera monitor app .
+#
+# ************************************************************************
+
 import sys
 import tkinter as tk
 from tkinter import ttk
@@ -135,49 +141,49 @@ class CameraMonitorApp:
         # Row 0
         ttk.Label(left_frame, text="Timestamp:").grid(row=0, column=0, padx=5, pady=5, sticky='w'+'e'+'n'+'s')
         ttk.Label(left_frame, textvariable=self.date_var).grid(row=0, column=1, padx=5, pady=5,  sticky='w'+'e'+'n'+'s')
-        
+
         # Row 1
         ttk.Label(left_frame, textvariable=self.time_var).grid(row=1, column=1, padx=5, pady=5,  sticky='w'+'e'+'n'+'s')
-        
+
         # Row 2
         ttk.Label(left_frame, text="Temperature [°C]:").grid(row=2, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Label(left_frame, textvariable=self.temp_var).grid(row=2, column=1, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
-        
+
         # Row 3
         ttk.Label(left_frame, text="Gain [dB]:").grid(row=3, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Label(left_frame, textvariable=self.gain_var).grid(row=3, column=1, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
-        
+
         # Row 4
         ttk.Label(left_frame, text="Exposure [µs]:").grid(row=4, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Label(left_frame, textvariable=self.exposure_var).grid(row=4, column=1, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
-        
+
         # Row 5
-        ttk.Label(left_frame, text="").grid(row=5, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')   
-        
-        # Row 6        
+        ttk.Label(left_frame, text="").grid(row=5, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
+
+        # Row 6
         ttk.Button(left_frame, text="Close QHY", command=self.close_qhy, width=15).grid(row=6, column=0)
         ttk.Button(left_frame, text="Reset QHY", command=self.reset_qhy, width=15).grid(row=6, column=1)
-        
+
         # Row 7
         self.view_button = ttk.Button(left_frame, text="View QHY Image", command=self.view_qhy_image, width=15)
         self.view_button.grid(row=7, column=0)
         self.mask_editor_button = ttk.Button(left_frame, text="Mask Editor", command=self.edit_mask, width=15)
         self.mask_editor_button.grid(row=7, column=1)
-        
+
         ### Right Frame
-        
+
         # Row 0
         ttk.Label(right_frame, text="target_brightness:", background='#3399FF').grid(row=0, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Entry(right_frame, textvariable=self.target_brightness_var, width=6).grid(row=0, column=1, sticky='w')
         ttk.Label(right_frame, text="target_temperature:", background='#3399FF').grid(row=0, column=2, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Entry(right_frame, textvariable=self.target_temperature_var, width=6).grid(row=0, column=3, sticky='w')
-        
+
         # Row 1
         ttk.Label(right_frame, text="target_gain:", background='#3399FF').grid(row=1, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Entry(right_frame, textvariable=self.target_gain_var, width=6).grid(row=1, column=1, sticky='w')
         ttk.Label(right_frame, text="compensation_factor:", background='#3399FF').grid(row=1, column=2, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Entry(right_frame, textvariable=self.compensation_factor_var, width=6).grid(row=1, column=3, sticky='w')
-        
+
         # Row 2
         ttk.Label(right_frame, text="exposure_min:", background='#3399FF').grid(row=2, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Entry(right_frame, textvariable=self.exposure_min_var, width=6).grid(row=2, column=1, sticky='w')
@@ -185,7 +191,7 @@ class CameraMonitorApp:
         ttk.Entry(right_frame, textvariable=self.exposure_max_var, width=6).grid(row=2, column=3, sticky='w')
         ttk.Label(right_frame, text="exposure_min_step:", background='#3399FF').grid(row=2, column=4, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Entry(right_frame, textvariable=self.exposure_min_step_var, width=6).grid(row=2, column=5, sticky='w')
-        
+
         # Row 3
         ttk.Label(right_frame, text="gain_min:", background='#3399FF').grid(row=3, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Entry(right_frame, textvariable=self.gain_min_var, width=6).grid(row=3, column=1, sticky='w')
@@ -193,7 +199,7 @@ class CameraMonitorApp:
         ttk.Entry(right_frame, textvariable=self.gain_max_var, width=6).grid(row=3, column=3, sticky='w')
         ttk.Label(right_frame, text="gain_min_step:", background='#3399FF').grid(row=3, column=4, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Entry(right_frame, textvariable=self.gain_min_step_var, width=6).grid(row=3, column=5, sticky='w')
-        
+
         # Row 4
         ttk.Label(right_frame, text="histogram_sampling:", background='#3399FF').grid(row=4, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Entry(right_frame, textvariable=self.histogram_sampling_var, width=6).grid(row=4, column=1, sticky='w')
@@ -201,18 +207,18 @@ class CameraMonitorApp:
         ttk.Entry(right_frame, textvariable=self.histogram_dark_point_var, width=6).grid(row=4, column=3, sticky='w')
         ttk.Label(right_frame, text="histogram_bright_point:", background='#3399FF').grid(row=4, column=4, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
         ttk.Entry(right_frame, textvariable=self.histogram_bright_point_var, width=6).grid(row=4, column=5, sticky='w')
-        
+
         # Row 5
         ttk.Label(right_frame, text="", background='#3399FF').grid(row=5, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
 
         # Row 6
         ttk.Label(right_frame, text="", background='#3399FF').grid(row=6, column=0, padx=5,  pady=5,  sticky='w'+'e'+'n'+'s')
-        
+
         # Row 7
         ttk.Button(right_frame, text="Apply Parameters", command=self.apply_parameters, width=15).grid(row=7, column=2)
-        
+
         ### Message Frame
-        
+
         # Row 0
         ttk.Label(msg_frame, textvariable=self.support_msg, background='#333', foreground='#FFF').grid(row=0, column=0)
         ttk.Label(msg_frame, textvariable=self.camera_msg, background='#600', foreground='#FFF').grid(row=0, column=1)
@@ -238,13 +244,13 @@ class CameraMonitorApp:
                     self.camera_msg.set("QHY is running")
                 else:
                     self.camera_msg.set("QHY crashed")
-                
+
                 # Convert UNIX timestamp (float or int) → formatted UTC strings
                 ts = status_msg.time_stamp / 1e6
                 dt_utc = datetime.fromtimestamp(ts, tz=timezone.utc)
                 self.date_var.set(dt_utc.strftime("%Y-%m-%d"))
                 self.time_var.set(dt_utc.strftime("%H:%M:%S.%f")[:-3] + " UTC")
-                
+
             time.sleep(0.1)
 
 
@@ -272,7 +278,7 @@ class CameraMonitorApp:
             param.set(param_default)
             new_param = param_default
         return new_param
-    
+
 
     def view_qhy_image(self):
         if self.view_process and self.view_process.poll() is None:
@@ -298,7 +304,7 @@ class CameraMonitorApp:
         except Exception as e:
             self.support_msg.set(f"Failed to start Mask Editor: {e}")
             self.mask_editor_button.state(['!disabled'])
-            
+
 
     def check_process_status(self):
         if self.view_process:
@@ -310,7 +316,7 @@ class CameraMonitorApp:
                 self.mask_editor_button.state(['!disabled']) # Re-enable
                 self.mask_edit_process = None
         self.left_frame.after(500, self.check_process_status)
-        
+
 
     def apply_parameters(self):
         params_message = self.params_proto_snd.get_message_type()
@@ -327,7 +333,7 @@ class CameraMonitorApp:
         params_message.histogram_sampling = self.get_parameters(self.histogram_sampling_var, 'histogram_sampling', DEFAULT_HISTOGRAM_SAMPLING)
         params_message.histogram_dark_point = self.get_parameters(self.histogram_dark_point_var, 'histogram_dark_point', DEFAULT_HISTOGRAM_DARK_POINT)
         params_message.histogram_bright_point = self.get_parameters(self.histogram_bright_point_var, 'histogram_bright_point', DEFAULT_HISTOGRAM_BRIGHT_POINT)
-        
+
         params_message.reset_qhy = False
         params_message.close_qhy = False
         self.params_proto_snd.send(params_message)

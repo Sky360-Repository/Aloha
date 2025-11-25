@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package gpslogger;
+
+// --- Global Positioning snapshot ---
+message GlobalPositioning {
+  string utc_time = 1;        // e.g. "16:38:32+00:00"
+  double latitude = 2;
+  string lat_dir = 3;         // "N" or "S"
+  double longitude = 4;
+  string lon_dir = 5;         // "E" or "W"
+  double speed_knots = 6;
+  double speed_kmh = 7;
+  double course = 8;          // true course in degrees
+  string date = 9;            // YYYY-MM-DD
+  string status = 10;         // "A"=active, "V"=void
+  int32 fix_quality = 11;     // 0=invalid, 1=GPS fix, etc.
+  int32 satellites_used = 12;
+  double hdop = 13;
+  double altitude = 14;
+  string alt_units = 15;      // usually "M"
+  double easting = 16;
+  double northing = 17;
+  int32 zone = 18;
+  bool northern = 19;
+}
+
+// --- GNSS DOP and Active Satellites ---
+message GnssDopActiveSatellites {
+  string mode = 1;            // "A"=automatic, "M"=manual
+  string fix_type = 2;        // "1"=no fix, "2"=2D, "3"=3D
+  repeated string satellites_in_use = 3; // PRN IDs
+  double pdop = 4;
+  double hdop = 5;
+  double vdop = 6;
+}
+
+// --- Satellite entry ---
+message Satellite {
+  string prn = 1;
+  double elevation_deg = 2;
+  double azimuth_deg = 3;
+  repeated double sat_unit_vec = 4; // [x,y,z] unit vector
+  double snr = 5;
+}
+
+// --- Satellites in View (aggregated per cycle) ---
+message SatellitesInView {
+  string talker = 1;          // "GP", "GL", "GA", "BD"
+  int32 total_in_view = 2;
+  repeated Satellite satellites = 3;
+}
+
+// --- Top-level wrapper so you can stream any of the three types ---
+message GpsLog {
+  oneof log_type {
+    GlobalPositioning global_positioning = 1;
+    GnssDopActiveSatellites dop_active = 2;
+    SatellitesInView satellites_in_view = 3;
+  }
+}

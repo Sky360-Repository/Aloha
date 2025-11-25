@@ -1,4 +1,13 @@
 numpy
 opencv_python
 opencv-contrib-python
+pyserial
+pynmea2
+pyproj
+bokeh
+pyrtlsdr
+numpy
+skyfield
+psutil
+pyModeS
 

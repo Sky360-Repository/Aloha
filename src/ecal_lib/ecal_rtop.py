@@ -1,3 +1,9 @@
+# \copyright    Sky360.org
+#
+# \brief        eCAL RTOP publisher.
+#
+# ************************************************************************
+
 import subprocess
 import time
 import ecal.core.core as ecal_core
