@@ -1,3 +1,9 @@
+# \copyright    Sky360.org
+#
+# \brief        Test for Object Detection.
+#
+# ************************************************************************
+
 import cv2
 import numpy as np
 import argparse

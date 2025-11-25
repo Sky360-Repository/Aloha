@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
-# coding: utf-8
+# \copyright    Sky360.org
+#
+# \brief        QHY Camera Controller.
+#
+# ************************************************************************
 
 import os
 import subprocess
@@ -216,14 +219,14 @@ class QHYCameraController:
     CONTROL_CURPWM = 15
     CONTROL_MANULPWM = 16
     CONTROL_COOLER = 18
-    
+
     ## FIXED Parameters
     RING_BUFFER_FRAMES = 200  # number of frames in ring buffer
     ROI_WIDTH = ROI_HEIGHT = 3200 # squared ROI, centered to zenith
     BITS_PER_PIXEL = 16  # image depth (bit-depth)
     COLOR_CHANNELS = 1  # Number of image color channels (monochrome)
     TARGET_TEMPERATURE = -20.0 # [°C]
-    
+
     ## VARIABLE Parameters
     MASK_PATH = "../scripts/mask.png"
     TARGET_EXPOSURE = 70000 # [µs] initial exposure
@@ -327,7 +330,7 @@ class QHYCameraController:
 
     def initialize_camera(self):
         if debug: print(f"Initialisation: starting to initialize the camera")
-        
+
         # Resetting USB
         try:
             subprocess.check_call(["usbreset", "Q183-Cool"])
@@ -488,7 +491,7 @@ class QHYCameraController:
                 consecutive_failures = 0
                 img = np.frombuffer(self.temp_buffer, dtype=np.uint16).reshape((self.h.value, self.w.value))
                 self.successes += 1
-                
+
                 if debug: print(f"Calibration: successfully fetched a live frame, successes={self.successes} ✅")
             else:
                 consecutive_failures += 1
@@ -504,7 +507,7 @@ class QHYCameraController:
                 ret = -1
 
             time.sleep(self.delay)
-            
+
         return self.delay
 
     # Temperature control
@@ -527,13 +530,13 @@ class QHYCameraController:
         #print(f"CAM: cam_ready is {self.cam_ready}")
         prev_time = time.perf_counter()
         ret = self.sdk.GetQHYCCDLiveFrame(self.cam, ctypes.byref(self.w), ctypes.byref(self.h), ctypes.byref(self.bpp), ctypes.byref(self.channels), self.temp_buffer)
-        
+
         # Retry in case of unsuccessful data aquisition
         if (ret != 0):
             time.sleep(abs(self.FRAME_GRAB_PENALTY_SEC - self.delay)) # sleep before aquiring again
             if debug: print("retrying frame aquisition ...")
             ret = self.sdk.GetQHYCCDLiveFrame(self.cam, ctypes.byref(self.w), ctypes.byref(self.h), ctypes.byref(self.bpp), ctypes.byref(self.channels), self.temp_buffer)
-        
+
         if (ret == 0):
             # Convert buffer to image
             img = np.frombuffer(self.temp_buffer, dtype=np.uint16).reshape((self.h.value, self.w.value))
@@ -566,19 +569,19 @@ class QHYCameraController:
                 self.control_temperature_pwm()
 
             self.ring_buffer.frame_index = (self.ring_buffer.frame_index + 1) % self.ring_buffer.buffer_size  # Cycle index
-            
+
             # Delay estimation before the next frame is aquired to keep target_FPS
             processing_time = time.perf_counter() - prev_time
             self.delay = 1 / self.FPS_TARGET - processing_time
             if self.delay < 0: self.delay = 0
             estimated_fps = 1 / (processing_time + self.delay)
             if debug: print(f"Live: Index={self.ring_buffer.frame_index}, Processing time={processing_time:.4f}s, Delay={self.delay:.4f}s, Estimated FPS={estimated_fps:.1f} ✅")
-            
+
             time.sleep(self.delay)
             self.cam_ready = True
             #print(f"CAM: cam_ready is {self.cam_ready}")
             return img  # Return the processed frame
-            
+
         return None
 
 
@@ -637,18 +640,18 @@ class QHYCameraController:
 
     def set_target_temperature(self, target_temperature):
         self.target_temp = target_temperature
-    
+
     def set_histogram_sampling(self, histogram_sampling):
         self.histogram_sampling = histogram_sampling
-        
-    
+
+
     def set_histogram_dark_point(self, histogram_dark_point):
         self.histogram_dark_point = histogram_dark_point
-        
-    
+
+
     def set_histogram_bright_point(self, histogram_bright_point):
         self.histogram_bright_point = histogram_bright_point
-        
+
 
     def close(self):
         # Stop live camera
@@ -704,7 +707,7 @@ if __name__ == "__main__":
 
         if quit_requested:
             break
-        
+
     # Close
     qhy_camera.close()
 

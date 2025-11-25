@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package adsblogger;
+
+// --- ADS-B message decoded from RTL-SDR ---
+message AdsbMessage {
+  string raw_line = 1;     // e.g. "*8b5bef2682549656d51deab18568;"
+  string hex = 2;          // hex payload string
+  int32 df = 3;            // Downlink Format (DF)
+  string icao = 4;         // ICAO aircraft address (hex)
+  int32 type_code = 5;     // ADS-B Type Code
+  double altitude_m = 6;   // altitude in meters
+  double latitude = 7;     // decoded latitude
+  double longitude = 8;    // decoded longitude
+  double azimuth_deg = 9;  // bearing from receiver to aircraft
+  double elevation_deg = 10; // elevation angle from receiver
+  double range_m = 11;     // slant range in meters
+  string timestamp = 12;   // ISO8601 timestamp string
+}
+
+// --- Top-level wrapper so you can stream ADS-B logs alongside GPS logs ---
+message AdsbLog {
+  repeated AdsbMessage messages = 1;
+}
