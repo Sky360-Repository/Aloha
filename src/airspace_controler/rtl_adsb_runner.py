@@ -4,14 +4,18 @@
 #
 # ************************************************************************
 
+import threading
 import subprocess
-from datetime import datetime, timezone
 import re
 import math
 import pyModeS as pms
+from datetime import datetime, timezone
 from collections import defaultdict
-from .utils import gps_to_utm
-import threading
+try:
+    from .utils import gps_to_utm
+except ImportError:
+    from utils import gps_to_utm
+
 
 
 class CPRBuffer:

@@ -4,6 +4,10 @@
 #
 # ************************************************************************
 
+import sys
+import serial
+from serial.tools import list_ports
+
 from airspace_controler.rtl_adsb_runner import RtlAdsbRunner
 from airspace_controler.gps_runner import GpsRunner
 
@@ -96,7 +100,25 @@ if __name__ == "__main__":
 
     # Windows: COM3, COM4, etc.
     # Linux/Ubuntu: /dev/ttyUSB0, /dev/ttyUSB1, /dev/ttyS0, etc. (depending on whether it’s a USB-serial adapter or a built-in port).
-    satellite_detector = GpsRunner(port='COM3', baud_rate=9600)
+
+    # Detect available ports
+    port_list = list(list_ports.comports())
+    gps_port = None
+
+    if sys.platform.startswith("win"):
+        # Windows default
+        gps_port = "COM3"
+    else:
+        # Linux/Ubuntu default
+        gps_port = "/dev/ttyUSB0"
+
+    # If any ports are detected, prefer the first one
+    if port_list:
+        gps_port = port_list[0].device
+
+    print(f"Using GPS port: {gps_port}")
+
+    satellite_detector = GpsRunner(port=gps_port, baud_rate=9600)
     satellite_detector.run()
 
     my_location = satellite_detector.get_my_location()

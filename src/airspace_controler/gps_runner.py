@@ -4,12 +4,15 @@
 #
 # ************************************************************************
 
+import sys
 import serial
 from serial.tools import list_ports
 import pynmea2
 import threading
-from .utils import gps_to_utm, sat_to_unit_vector
-
+try:
+    from .utils import gps_to_utm, sat_to_unit_vector
+except ImportError:
+    from utils import gps_to_utm, sat_to_unit_vector
 
 class GpsRunner:
     def __init__(self, port='COM3', baud_rate=9600):
@@ -278,7 +281,25 @@ class GpsRunner:
 if __name__ == "__main__":
     # Windows: COM3, COM4, etc.
     # Linux/Ubuntu: /dev/ttyUSB0, /dev/ttyUSB1, /dev/ttyS0, etc. (depending on whether it’s a USB‑serial adapter or a built‑in port).
-    gps_runner = GpsRunner(port='COM3', baud_rate=9600)
+
+    # Detect available ports
+    port_list = list(list_ports.comports())
+    gps_port = None
+
+    if sys.platform.startswith("win"):
+        # Windows default
+        gps_port = "COM3"
+    else:
+        # Linux/Ubuntu default
+        gps_port = "/dev/ttyUSB0"
+
+    # If any ports are detected, prefer the first one
+    if port_list:
+        gps_port = port_list[0].device
+
+    print(f"Using GPS port: {gps_port}")
+
+    gps_runner = GpsRunner(port=gps_port, baud_rate=9600)
     gps_runner.run()
 
     try:
