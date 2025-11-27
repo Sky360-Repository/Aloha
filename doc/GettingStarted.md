@@ -31,7 +31,15 @@ Set best performance
 sudo cpufreq-set -g schedutil && sudo cpufreq-set -u 2.21GHz -d 408MHz
 ```
 
-4. Install QHY SDK
+4. Configure **ZRAM Swap**
+
+Ubuntu typically enables swap via a disk-backed swapfile (on SD or NVMe).
+
+This will cause wear on the SD or NVMe drives.
+
+Please follow this instructions to configure **ZRAM Swap**: [swapfile.md](swapfile.md)
+
+5. Install QHY SDK
 ```
 extract sdk_Arm64_24.12.26.tgz
 sudo chmod +x *.sh
@@ -44,11 +52,11 @@ sudo udevadm control –reload-rules
 sudo udevadm trigger
 ```
 
-5. Setup a github account
+6. Setup a github account
 
 [https://github.com](https://github.com)
 
-6. Add the SSH key to the github account
+7. Add the SSH key to the github account
 ````
 ssh-keygen -o -t rsa -C "your_email@email.com"
 cd ~/.ssh/
@@ -56,13 +64,13 @@ gedit id_rsa.pub
 ````
 Copy the SSH key to your github account [https://github.com/settings/keys](https://github.com/settings/keys)
 
-7. Configure git
+8. Configure git
 ```
 git config --global user.email your_email@email.com
 git config --global user.name your_name
 ```
 
-8. You can now set your OrangePi5+ development environment using this setup script
+9. You can now set your OrangePi5+ development environment using this setup script
 
 ```bash
 curl -O https://raw.githubusercontent.com/Sky360-Repository/Aloha/scripts/setup.sh
@@ -70,12 +78,12 @@ curl -O https://raw.githubusercontent.com/Sky360-Repository/Aloha/scripts/setup.
 source setup.sh
 ```
 
-9. Check if development environment is ready:
+10. Check if development environment is ready:
 ```bash
 source scripts/diagnose_setup.sh
 ```
 
-10. All done
+11. All done
 
 Go to Aloha
 ```
