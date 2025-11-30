@@ -1,5 +1,7 @@
 ## **Object Detection System Architecture**
 
+![Object Detection](./img/ObjectDetection.png)
+
 ### **1. Method for Object Detection**
 
 #### **General Description**
