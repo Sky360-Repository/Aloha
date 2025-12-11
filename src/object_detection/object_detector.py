@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 import argparse
 import time
-
+from timer import Timer
 from skimage.feature import blob_dog
 from skimage import morphology, measure, color, filters
 from skimage.feature import shape_index
@@ -64,40 +64,49 @@ class ObjectDetector:
     def process_frame(self, rgb_image: np.ndarray):
 
         # Gaussian Blur - also for demo so that is faster to learn the background
-        blured_img = cv2.GaussianBlur(rgb_image, (7, 7), 0)
-        gray_img = cv2.cvtColor(rgb_image, cv2.COLOR_BGR2GRAY)
+        with Timer('GaussianBlur'):
+            blured_img = cv2.GaussianBlur(rgb_image, (7, 7), 0)
+        
+        with Timer('cvtColor'):
+            gray_img = cv2.cvtColor(rgb_image, cv2.COLOR_BGR2GRAY)
 
         # Features from extract_gradients
-        grad_magnitude, grad_angle = self.extract_gradients(gray_img)
-
-        with ThreadPoolExecutor() as executor:
-            futures = {
-                'mag': executor.submit(self.fd_mag.process_frame, grad_magnitude, self.config.mag_frame_dif_th),
-                'ang': executor.submit(self.fd_ang.process_frame, grad_angle, self.config.ang_frame_dif_th),
-                'rgb': executor.submit(self.fd_rgb.process_frame, rgb_image, self.config.rgb_frame_dif_th),
-                'dog': executor.submit(self.detect_dots_dog, gray_img),
-                'gmm': executor.submit(self.gmm_bg.get_difference_mask, blured_img),
-                'vibe': executor.submit(self.vibe_bg.get_difference_mask, blured_img)
-            }
+        with Timer('extract_gradients'):
+            grad_magnitude, grad_angle = self.extract_gradients(gray_img)
 
         # Gradient based detector
-        mag_mask = futures['mag'].result()
-        mag_mask = self.validate_mask(mag_mask, self.config.max_coverage)
-
-        ang_mask = futures['ang'].result()
-        ang_mask = self.clean(ang_mask, self.config.min_obj_size, self.config.min_hole_area)
+        with Timer('fd_mag validate_mask'):
+            mag_mask = self.fd_mag.process_frame(grad_magnitude, self.config.mag_frame_dif_th)
+        
+        with Timer('Object detector'):
+            mag_mask = self.validate_mask(mag_mask, self.config.max_coverage)
+        
+        with Timer('fd_ang'):
+            ang_mask = self.fd_ang.process_frame(grad_angle, self.config.ang_frame_dif_th)
+        
+        with Timer('fd_ang clean'):
+            ang_mask = self.clean(ang_mask, self.config.min_obj_size, self.config.min_hole_area)
 
         # RGB frame difference
-        rgb_diff_mask = futures['rgb'].result()
+        with Timer('fd_rgb'):
+            rgb_diff_mask = self.fd_rgb.process_frame(rgb_image, self.config.rgb_frame_dif_th)
 
         # DoG detecting areas of interest
-        blobs_dog_mask = futures['dog'].result()
-        blobs_dog_mask = self.clean(blobs_dog_mask, self.config.min_obj_size)
+        with Timer('dog'):
+            blobs_dog_mask = self.detect_dots_dog(gray_img)
+        
+        with Timer('dog clean'):
+            blobs_dog_mask = self.clean(blobs_dog_mask, self.config.min_obj_size)
 
-        gmm_mask = futures['gmm'].result()
-        gmm_mask = self.validate_mask(gmm_mask, self.config.max_coverage)
-        vibe_mask = futures['vibe'].result()
+        with Timer('gmm'):
+            gmm_mask = self.gmm_bg.get_difference_mask(blured_img)
+        
+        with Timer('gmm validate_mask'):
+            gmm_mask = self.validate_mask(gmm_mask, self.config.max_coverage)
 
+        with Timer('vibe_bg'):
+            vibe_mask = self.vibe_bg.get_difference_mask(blured_img)
+        
         # TODO: add GMM and ViBe
         # Fusion logic (TBD):
         #   moving = fg_diff & (fg_vibe | fg_gmm)

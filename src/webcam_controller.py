@@ -38,6 +38,8 @@ JPEG_QUALITY = 100
 
 def webcam2ecal(param_queue, status_queue):
 
+    print(f"python view_ecal_video.py --channel_name \"{QHY_CHANNEL_NAME}\" --message_name \"{MESSAGE_NAME}\" --proto_file \"{PROTO_FILE}\"")
+    
     # Set process name
     set_process_name(f"{QHY_CHANNEL_NAME} Broadcast")
 

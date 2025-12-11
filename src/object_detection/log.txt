@@ -1,0 +1,1258 @@
+
+
+Default usage: python object_detector.py --camera_id 0 --nbr_history_frames 2
+
+Press 'Esc' key to stop
+
+Check configuration: 
+camera_id = 0
+Config Image = [1920.0, 1080.0]; at 30.0 fps
+Estimated frames to integrate ghosts: 2 frames (target 70% weight)
+[GaussianBlur]
+Elapsed: 0.01670694351196289
+[cvtColor]
+Elapsed: 0.0008149147033691406
+[extract_gradients]
+Elapsed: 0.2462465763092041
+[fd_mag validate_mask]
+Elapsed: 0.13296866416931152
+[Object detector]
+Elapsed: 0.0002772808074951172
+[fd_ang]
+Elapsed: 0.11091160774230957
+[fd_ang clean]
+Elapsed: 0.2963564395904541
+[fd_rgb]
+Elapsed: 0.49556708335876465
+[dog]
+Elapsed: 0.08570098876953125
+[dog clean]
+Elapsed: 0.29022789001464844
+[gmm]
+Elapsed: 0.5989139080047607
+[gmm validate_mask]
+Elapsed: 0.00027441978454589844
+[vibe_bg]
+Elapsed: 1.2056033611297607
+[GaussianBlur]
+Elapsed: 0.01542210578918457
+[cvtColor]
+Elapsed: 0.0007941722869873047
+[extract_gradients]
+Elapsed: 0.26355600357055664
+[fd_mag validate_mask]
+Elapsed: 0.12460899353027344
+[Object detector]
+Elapsed: 0.0002696514129638672
+[fd_ang]
+Elapsed: 0.08842754364013672
+[fd_ang clean]
+Elapsed: 0.2951498031616211
+[fd_rgb]
+Elapsed: 0.4479515552520752
+[dog]
+Elapsed: 0.06961870193481445
+[dog clean]
+Elapsed: 0.3293755054473877
+[gmm]
+Elapsed: 0.5809929370880127
+[gmm validate_mask]
+Elapsed: 0.00031757354736328125
+[vibe_bg]
+Elapsed: 1.260693073272705
+[GaussianBlur]
+Elapsed: 0.014423608779907227
+[cvtColor]
+Elapsed: 0.0013539791107177734
+[extract_gradients]
+Elapsed: 0.3252232074737549
+[fd_mag validate_mask]
+Elapsed: 0.10022974014282227
+[Object detector]
+Elapsed: 0.00022840499877929688
+[fd_ang]
+Elapsed: 0.09462285041809082
+[fd_ang clean]
+Elapsed: 0.2958543300628662
+[fd_rgb]
+Elapsed: 0.4897630214691162
+[dog]
+Elapsed: 0.0874948501586914
+[dog clean]
+Elapsed: 0.34801340103149414
+[gmm]
+Elapsed: 0.8017151355743408
+[gmm validate_mask]
+Elapsed: 0.00016927719116210938
+[vibe_bg]
+Elapsed: 1.2277910709381104
+[GaussianBlur]
+Elapsed: 0.01422739028930664
+[cvtColor]
+Elapsed: 0.0013735294342041016
+[extract_gradients]
+Elapsed: 0.23651957511901855
+[fd_mag validate_mask]
+Elapsed: 0.10609006881713867
+[Object detector]
+Elapsed: 0.0002300739288330078
+[fd_ang]
+Elapsed: 0.11847567558288574
+[fd_ang clean]
+Elapsed: 0.29813718795776367
+[fd_rgb]
+Elapsed: 0.4510514736175537
+[dog]
+Elapsed: 0.1587669849395752
+[dog clean]
+Elapsed: 0.2940671443939209
+[gmm]
+Elapsed: 0.7913014888763428
+[gmm validate_mask]
+Elapsed: 0.00029921531677246094
+[vibe_bg]
+Elapsed: 1.263789415359497
+[GaussianBlur]
+Elapsed: 0.023387908935546875
+[cvtColor]
+Elapsed: 0.0014562606811523438
+[extract_gradients]
+Elapsed: 0.3332700729370117
+[fd_mag validate_mask]
+Elapsed: 0.10905623435974121
+[Object detector]
+Elapsed: 0.00025463104248046875
+[fd_ang]
+Elapsed: 0.08648419380187988
+[fd_ang clean]
+Elapsed: 0.31108999252319336
+[fd_rgb]
+Elapsed: 0.5220234394073486
+[dog]
+Elapsed: 0.06659364700317383
+[dog clean]
+Elapsed: 0.31893110275268555
+[gmm]
+Elapsed: 0.8178558349609375
+[gmm validate_mask]
+Elapsed: 0.0003199577331542969
+[vibe_bg]
+Elapsed: 1.2266936302185059
+[GaussianBlur]
+Elapsed: 0.013897895812988281
+[cvtColor]
+Elapsed: 0.0013921260833740234
+[extract_gradients]
+Elapsed: 0.2571537494659424
+[fd_mag validate_mask]
+Elapsed: 0.09781098365783691
+[Object detector]
+Elapsed: 0.00018930435180664062
+[fd_ang]
+Elapsed: 0.07718014717102051
+[fd_ang clean]
+Elapsed: 0.292499303817749
+[fd_rgb]
+Elapsed: 0.49423909187316895
+[dog]
+Elapsed: 0.06470584869384766
+[dog clean]
+Elapsed: 0.29114484786987305
+[gmm]
+Elapsed: 0.7741618156433105
+[gmm validate_mask]
+Elapsed: 0.00015687942504882812
+[vibe_bg]
+Elapsed: 1.1930644512176514
+[GaussianBlur]
+Elapsed: 0.014789581298828125
+[cvtColor]
+Elapsed: 0.0008170604705810547
+[extract_gradients]
+Elapsed: 0.25028347969055176
+[fd_mag validate_mask]
+Elapsed: 0.12552475929260254
+[Object detector]
+Elapsed: 0.00024271011352539062
+[fd_ang]
+Elapsed: 0.15671539306640625
+[fd_ang clean]
+Elapsed: 0.3214123249053955
+[fd_rgb]
+Elapsed: 0.5360805988311768
+[dog]
+Elapsed: 0.08880400657653809
+[dog clean]
+Elapsed: 0.2932441234588623
+[gmm]
+Elapsed: 0.890007495880127
+[gmm validate_mask]
+Elapsed: 0.0002014636993408203
+[vibe_bg]
+Elapsed: 1.3022284507751465
+[GaussianBlur]
+Elapsed: 0.015457391738891602
+[cvtColor]
+Elapsed: 0.0009038448333740234
+[extract_gradients]
+Elapsed: 0.2761111259460449
+[fd_mag validate_mask]
+Elapsed: 0.19328045845031738
+[Object detector]
+Elapsed: 0.0002713203430175781
+[fd_ang]
+Elapsed: 0.15002965927124023
+[fd_ang clean]
+Elapsed: 0.2963685989379883
+[fd_rgb]
+Elapsed: 0.5042321681976318
+[dog]
+Elapsed: 0.07963728904724121
+[dog clean]
+Elapsed: 0.30916547775268555
+[gmm]
+Elapsed: 0.8132262229919434
+[gmm validate_mask]
+Elapsed: 0.00019359588623046875
+[vibe_bg]
+Elapsed: 1.3363053798675537
+[GaussianBlur]
+Elapsed: 0.01593494415283203
+[cvtColor]
+Elapsed: 0.0014426708221435547
+[extract_gradients]
+Elapsed: 0.2522549629211426
+[fd_mag validate_mask]
+Elapsed: 0.11210989952087402
+[Object detector]
+Elapsed: 0.0002474784851074219
+[fd_ang]
+Elapsed: 0.1635878086090088
+[fd_ang clean]
+Elapsed: 0.3201024532318115
+[fd_rgb]
+Elapsed: 0.5440337657928467
+[dog]
+Elapsed: 0.08432340621948242
+[dog clean]
+Elapsed: 0.29331231117248535
+[gmm]
+Elapsed: 0.9048271179199219
+[gmm validate_mask]
+Elapsed: 0.0001983642578125
+[vibe_bg]
+Elapsed: 1.3039045333862305
+[GaussianBlur]
+Elapsed: 0.013142824172973633
+[cvtColor]
+Elapsed: 0.0013289451599121094
+[extract_gradients]
+Elapsed: 0.2382645606994629
+[fd_mag validate_mask]
+Elapsed: 0.0893394947052002
+[Object detector]
+Elapsed: 0.00024056434631347656
+[fd_ang]
+Elapsed: 0.13082647323608398
+[fd_ang clean]
+Elapsed: 0.2975444793701172
+[fd_rgb]
+Elapsed: 0.4481656551361084
+[dog]
+Elapsed: 0.13540220260620117
+[dog clean]
+Elapsed: 0.29973602294921875
+[gmm]
+Elapsed: 0.7820823192596436
+[gmm validate_mask]
+Elapsed: 0.00017142295837402344
+[vibe_bg]
+Elapsed: 1.2659187316894531
+[GaussianBlur]
+Elapsed: 0.013374090194702148
+[cvtColor]
+Elapsed: 0.11648392677307129
+[extract_gradients]
+Elapsed: 0.23739862442016602
+[fd_mag validate_mask]
+Elapsed: 0.0990607738494873
+[Object detector]
+Elapsed: 0.00019121170043945312
+[fd_ang]
+Elapsed: 0.07840847969055176
+[fd_ang clean]
+Elapsed: 0.29543018341064453
+[fd_rgb]
+Elapsed: 0.5013537406921387
+[dog]
+Elapsed: 0.06513381004333496
+[dog clean]
+Elapsed: 0.2935597896575928
+[gmm]
+Elapsed: 0.781327486038208
+[gmm validate_mask]
+Elapsed: 0.0001575946807861328
+[vibe_bg]
+Elapsed: 1.198575496673584
+[GaussianBlur]
+Elapsed: 0.013826131820678711
+[cvtColor]
+Elapsed: 0.0013849735260009766
+[extract_gradients]
+Elapsed: 0.25658655166625977
+[fd_mag validate_mask]
+Elapsed: 0.10724020004272461
+[Object detector]
+Elapsed: 0.00025725364685058594
+[fd_ang]
+Elapsed: 0.10314106941223145
+[fd_ang clean]
+Elapsed: 0.2990550994873047
+[fd_rgb]
+Elapsed: 0.5126593112945557
+[dog]
+Elapsed: 0.07919168472290039
+[dog clean]
+Elapsed: 0.30205488204956055
+[gmm]
+Elapsed: 0.798734188079834
+[gmm validate_mask]
+Elapsed: 0.00018262863159179688
+[vibe_bg]
+Elapsed: 1.2702057361602783
+[GaussianBlur]
+Elapsed: 0.015421152114868164
+[cvtColor]
+Elapsed: 0.0014846324920654297
+[extract_gradients]
+Elapsed: 0.2558431625366211
+[fd_mag validate_mask]
+Elapsed: 0.09878778457641602
+[Object detector]
+Elapsed: 0.000232696533203125
+[fd_ang]
+Elapsed: 0.12486028671264648
+[fd_ang clean]
+Elapsed: 0.30823254585266113
+[fd_rgb]
+Elapsed: 0.6000218391418457
+[dog]
+Elapsed: 0.10886859893798828
+[dog clean]
+Elapsed: 0.2932865619659424
+[gmm]
+Elapsed: 0.8472654819488525
+[gmm validate_mask]
+Elapsed: 0.00016736984252929688
+[vibe_bg]
+Elapsed: 1.278425931930542
+[GaussianBlur]
+Elapsed: 0.12176370620727539
+[cvtColor]
+Elapsed: 0.0013775825500488281
+[extract_gradients]
+Elapsed: 0.2430872917175293
+[fd_mag validate_mask]
+Elapsed: 0.11770868301391602
+[Object detector]
+Elapsed: 0.00025081634521484375
+[fd_ang]
+Elapsed: 0.1174459457397461
+[fd_ang clean]
+Elapsed: 0.3439927101135254
+[fd_rgb]
+Elapsed: 0.4746229648590088
+[dog]
+Elapsed: 0.07283639907836914
+[dog clean]
+Elapsed: 0.2938089370727539
+[gmm]
+Elapsed: 0.8155560493469238
+[gmm validate_mask]
+Elapsed: 0.00017571449279785156
+[vibe_bg]
+Elapsed: 1.2167994976043701
+[GaussianBlur]
+Elapsed: 0.013697624206542969
+[cvtColor]
+Elapsed: 0.0008082389831542969
+[extract_gradients]
+Elapsed: 0.24153518676757812
+[fd_mag validate_mask]
+Elapsed: 0.09367966651916504
+[Object detector]
+Elapsed: 0.0002627372741699219
+[fd_ang]
+Elapsed: 0.11773943901062012
+[fd_ang clean]
+Elapsed: 0.3074796199798584
+[fd_rgb]
+Elapsed: 0.5135128498077393
+[dog]
+Elapsed: 0.09757876396179199
+[dog clean]
+Elapsed: 0.3012659549713135
+[gmm]
+Elapsed: 0.794785737991333
+[gmm validate_mask]
+Elapsed: 0.0001919269561767578
+[vibe_bg]
+Elapsed: 1.275681972503662
+[GaussianBlur]
+Elapsed: 0.01476907730102539
+[cvtColor]
+Elapsed: 0.000982046127319336
+[extract_gradients]
+Elapsed: 0.28769707679748535
+[fd_mag validate_mask]
+Elapsed: 0.10648655891418457
+[Object detector]
+Elapsed: 0.0002319812774658203
+[fd_ang]
+Elapsed: 0.0897836685180664
+[fd_ang clean]
+Elapsed: 0.29954028129577637
+[fd_rgb]
+Elapsed: 0.5579967498779297
+[dog]
+Elapsed: 0.06843042373657227
+[dog clean]
+Elapsed: 0.32567906379699707
+[gmm]
+Elapsed: 0.818418025970459
+[gmm validate_mask]
+Elapsed: 0.0001709461212158203
+[vibe_bg]
+Elapsed: 1.2615275382995605
+[GaussianBlur]
+Elapsed: 0.012837886810302734
+[cvtColor]
+Elapsed: 0.0014111995697021484
+[extract_gradients]
+Elapsed: 0.2642214298248291
+[fd_mag validate_mask]
+Elapsed: 0.0995936393737793
+[Object detector]
+Elapsed: 0.00020766258239746094
+[fd_ang]
+Elapsed: 0.07874917984008789
+[fd_ang clean]
+Elapsed: 0.2954742908477783
+[fd_rgb]
+Elapsed: 0.5023634433746338
+[dog]
+Elapsed: 0.0651407241821289
+[dog clean]
+Elapsed: 0.29198241233825684
+[gmm]
+Elapsed: 0.7765343189239502
+[gmm validate_mask]
+Elapsed: 0.0001571178436279297
+[vibe_bg]
+Elapsed: 1.1890909671783447
+[GaussianBlur]
+Elapsed: 0.016281843185424805
+[cvtColor]
+Elapsed: 0.0008370876312255859
+[extract_gradients]
+Elapsed: 0.2532055377960205
+[fd_mag validate_mask]
+Elapsed: 0.12698006629943848
+[Object detector]
+Elapsed: 0.00025725364685058594
+[fd_ang]
+Elapsed: 0.16149044036865234
+[fd_ang clean]
+Elapsed: 0.3314650058746338
+[fd_rgb]
+Elapsed: 0.5526332855224609
+[dog]
+Elapsed: 0.08198118209838867
+[dog clean]
+Elapsed: 0.2981090545654297
+[gmm]
+Elapsed: 0.8797805309295654
+[gmm validate_mask]
+Elapsed: 0.0001957416534423828
+[vibe_bg]
+Elapsed: 1.3020412921905518
+[GaussianBlur]
+Elapsed: 0.01398921012878418
+[cvtColor]
+Elapsed: 0.0009236335754394531
+[extract_gradients]
+Elapsed: 0.2758345603942871
+[fd_mag validate_mask]
+Elapsed: 0.15085363388061523
+[Object detector]
+Elapsed: 0.00022530555725097656
+[fd_ang]
+Elapsed: 0.08664536476135254
+[fd_ang clean]
+Elapsed: 0.3133668899536133
+[fd_rgb]
+Elapsed: 0.5216002464294434
+[dog]
+Elapsed: 0.06829285621643066
+[dog clean]
+Elapsed: 0.29636096954345703
+[gmm]
+Elapsed: 0.7924134731292725
+[gmm validate_mask]
+Elapsed: 0.0001926422119140625
+[vibe_bg]
+Elapsed: 1.229184627532959
+[GaussianBlur]
+Elapsed: 0.012805461883544922
+[cvtColor]
+Elapsed: 0.0012650489807128906
+[extract_gradients]
+Elapsed: 0.22957658767700195
+[fd_mag validate_mask]
+Elapsed: 0.11514401435852051
+[Object detector]
+Elapsed: 0.00019359588623046875
+[fd_ang]
+Elapsed: 0.11735343933105469
+[fd_ang clean]
+Elapsed: 0.2947092056274414
+[fd_rgb]
+Elapsed: 0.5723426342010498
+[dog]
+Elapsed: 0.07325553894042969
+[dog clean]
+Elapsed: 0.29407811164855957
+[gmm]
+Elapsed: 0.817086935043335
+[gmm validate_mask]
+Elapsed: 0.00015783309936523438
+[vibe_bg]
+Elapsed: 1.215348482131958
+[GaussianBlur]
+Elapsed: 0.01934671401977539
+[cvtColor]
+Elapsed: 0.0013620853424072266
+[extract_gradients]
+Elapsed: 0.28944826126098633
+[fd_mag validate_mask]
+Elapsed: 0.11485815048217773
+[Object detector]
+Elapsed: 0.03449702262878418
+[fd_ang]
+Elapsed: 0.1281576156616211
+[fd_ang clean]
+Elapsed: 0.3047816753387451
+[fd_rgb]
+Elapsed: 0.5161237716674805
+[dog]
+Elapsed: 0.07925844192504883
+[dog clean]
+Elapsed: 0.29569077491760254
+[gmm]
+Elapsed: 0.8061094284057617
+[gmm validate_mask]
+Elapsed: 0.059728384017944336
+[vibe_bg]
+Elapsed: 1.3181922435760498
+[GaussianBlur]
+Elapsed: 0.015065908432006836
+[cvtColor]
+Elapsed: 0.0014083385467529297
+[extract_gradients]
+Elapsed: 0.24581599235534668
+[fd_mag validate_mask]
+Elapsed: 0.10861539840698242
+[Object detector]
+Elapsed: 0.00024318695068359375
+[fd_ang]
+Elapsed: 0.1471538543701172
+[fd_ang clean]
+Elapsed: 0.29808855056762695
+[fd_rgb]
+Elapsed: 0.5700571537017822
+[dog]
+Elapsed: 0.06673479080200195
+[dog clean]
+Elapsed: 0.29357004165649414
+[gmm]
+Elapsed: 0.7823920249938965
+[gmm validate_mask]
+Elapsed: 0.00016999244689941406
+[vibe_bg]
+Elapsed: 1.2521955966949463
+[GaussianBlur]
+Elapsed: 0.12136197090148926
+[cvtColor]
+Elapsed: 0.001245737075805664
+[extract_gradients]
+Elapsed: 0.25658679008483887
+[fd_mag validate_mask]
+Elapsed: 0.09916138648986816
+[Object detector]
+Elapsed: 0.00022554397583007812
+[fd_ang]
+Elapsed: 0.08020734786987305
+[fd_ang clean]
+Elapsed: 0.29511427879333496
+[fd_rgb]
+Elapsed: 0.48618102073669434
+[dog]
+Elapsed: 0.06473636627197266
+[dog clean]
+Elapsed: 0.2936222553253174
+[gmm]
+Elapsed: 0.7793781757354736
+[gmm validate_mask]
+Elapsed: 0.0001552104949951172
+[vibe_bg]
+Elapsed: 1.2021713256835938
+[GaussianBlur]
+Elapsed: 0.0185546875
+[cvtColor]
+Elapsed: 0.0009169578552246094
+[extract_gradients]
+Elapsed: 0.27074551582336426
+[fd_mag validate_mask]
+Elapsed: 0.12482953071594238
+[Object detector]
+Elapsed: 0.00023317337036132812
+[fd_ang]
+Elapsed: 0.14558124542236328
+[fd_ang clean]
+Elapsed: 0.3056786060333252
+[fd_rgb]
+Elapsed: 0.5769503116607666
+[dog]
+Elapsed: 0.08564043045043945
+[dog clean]
+Elapsed: 0.29465246200561523
+[gmm]
+Elapsed: 0.8856914043426514
+[gmm validate_mask]
+Elapsed: 0.0001976490020751953
+[vibe_bg]
+Elapsed: 1.2979304790496826
+[GaussianBlur]
+Elapsed: 0.013946056365966797
+[cvtColor]
+Elapsed: 0.0014162063598632812
+[extract_gradients]
+Elapsed: 0.2456066608428955
+[fd_mag validate_mask]
+Elapsed: 0.08931446075439453
+[Object detector]
+Elapsed: 0.0002319812774658203
+[fd_ang]
+Elapsed: 0.15213942527770996
+[fd_ang clean]
+Elapsed: 0.2985982894897461
+[fd_rgb]
+Elapsed: 0.5344898700714111
+[dog]
+Elapsed: 0.06739401817321777
+[dog clean]
+Elapsed: 0.3203432559967041
+[gmm]
+Elapsed: 0.7854416370391846
+[gmm validate_mask]
+Elapsed: 0.000171661376953125
+[vibe_bg]
+Elapsed: 1.239384412765503
+[GaussianBlur]
+Elapsed: 0.01331782341003418
+[cvtColor]
+Elapsed: 0.0011563301086425781
+[extract_gradients]
+Elapsed: 0.23334026336669922
+[fd_mag validate_mask]
+Elapsed: 0.11426591873168945
+[Object detector]
+Elapsed: 0.00019550323486328125
+[fd_ang]
+Elapsed: 0.1158914566040039
+[fd_ang clean]
+Elapsed: 0.29298901557922363
+[fd_rgb]
+Elapsed: 0.5233719348907471
+[dog]
+Elapsed: 0.07365536689758301
+[dog clean]
+Elapsed: 0.29206204414367676
+[gmm]
+Elapsed: 0.8111674785614014
+[gmm validate_mask]
+Elapsed: 0.00017452239990234375
+[vibe_bg]
+Elapsed: 1.2122573852539062
+[GaussianBlur]
+Elapsed: 0.013766050338745117
+[cvtColor]
+Elapsed: 0.0009169578552246094
+[extract_gradients]
+Elapsed: 0.2348926067352295
+[fd_mag validate_mask]
+Elapsed: 0.0880882740020752
+[Object detector]
+Elapsed: 0.00023126602172851562
+[fd_ang]
+Elapsed: 0.12175154685974121
+[fd_ang clean]
+Elapsed: 0.3110380172729492
+[fd_rgb]
+Elapsed: 0.45705533027648926
+[dog]
+Elapsed: 0.14665675163269043
+[dog clean]
+Elapsed: 0.3005380630493164
+[gmm]
+Elapsed: 0.8047306537628174
+[gmm validate_mask]
+Elapsed: 0.00018906593322753906
+[vibe_bg]
+Elapsed: 1.261946439743042
+[GaussianBlur]
+Elapsed: 0.04204249382019043
+[cvtColor]
+Elapsed: 0.0010826587677001953
+[extract_gradients]
+Elapsed: 0.2566092014312744
+[fd_mag validate_mask]
+Elapsed: 0.10399150848388672
+[Object detector]
+Elapsed: 0.00021219253540039062
+[fd_ang]
+Elapsed: 0.08442068099975586
+[fd_ang clean]
+Elapsed: 0.32535457611083984
+[fd_rgb]
+Elapsed: 0.5179078578948975
+[dog]
+Elapsed: 0.06723380088806152
+[dog clean]
+Elapsed: 0.2943308353424072
+[gmm]
+Elapsed: 0.8163044452667236
+[gmm validate_mask]
+Elapsed: 0.00019502639770507812
+[vibe_bg]
+Elapsed: 1.2256853580474854
+[GaussianBlur]
+Elapsed: 0.013753175735473633
+[cvtColor]
+Elapsed: 0.0008122920989990234
+[extract_gradients]
+Elapsed: 0.24941658973693848
+[fd_mag validate_mask]
+Elapsed: 0.21081948280334473
+[Object detector]
+Elapsed: 0.0001881122589111328
+[fd_ang]
+Elapsed: 0.0788271427154541
+[fd_ang clean]
+Elapsed: 0.2930738925933838
+[fd_rgb]
+Elapsed: 0.49163389205932617
+[dog]
+Elapsed: 0.06490492820739746
+[dog clean]
+Elapsed: 0.29222655296325684
+[gmm]
+Elapsed: 0.7755906581878662
+[gmm validate_mask]
+Elapsed: 0.0001621246337890625
+[vibe_bg]
+Elapsed: 1.1986069679260254
+[GaussianBlur]
+Elapsed: 0.013591527938842773
+[cvtColor]
+Elapsed: 0.00135040283203125
+[extract_gradients]
+Elapsed: 0.2507743835449219
+[fd_mag validate_mask]
+Elapsed: 0.10863995552062988
+[Object detector]
+Elapsed: 0.00026297569274902344
+[fd_ang]
+Elapsed: 0.11450648307800293
+[fd_ang clean]
+Elapsed: 0.29874491691589355
+[fd_rgb]
+Elapsed: 0.45259928703308105
+[dog]
+Elapsed: 0.14306211471557617
+[dog clean]
+Elapsed: 0.30119752883911133
+[gmm]
+Elapsed: 0.7904322147369385
+[gmm validate_mask]
+Elapsed: 0.00019407272338867188
+[vibe_bg]
+Elapsed: 1.2648200988769531
+[GaussianBlur]
+Elapsed: 0.017865896224975586
+[cvtColor]
+Elapsed: 0.04008650779724121
+[extract_gradients]
+Elapsed: 0.2485661506652832
+[fd_mag validate_mask]
+Elapsed: 0.10479521751403809
+[Object detector]
+Elapsed: 0.00023484230041503906
+[fd_ang]
+Elapsed: 0.08551025390625
+[fd_ang clean]
+Elapsed: 0.3352622985839844
+[fd_rgb]
+Elapsed: 0.5150902271270752
+[dog]
+Elapsed: 0.06734657287597656
+[dog clean]
+Elapsed: 0.2943613529205322
+[gmm]
+Elapsed: 0.8442339897155762
+[gmm validate_mask]
+Elapsed: 0.0001773834228515625
+[vibe_bg]
+Elapsed: 1.2506980895996094
+[GaussianBlur]
+Elapsed: 0.01405477523803711
+[cvtColor]
+Elapsed: 0.0013425350189208984
+[extract_gradients]
+Elapsed: 0.283510684967041
+[fd_mag validate_mask]
+Elapsed: 0.08811235427856445
+[Object detector]
+Elapsed: 0.0001888275146484375
+[fd_ang]
+Elapsed: 0.07719588279724121
+[fd_ang clean]
+Elapsed: 0.2929990291595459
+[fd_rgb]
+Elapsed: 0.5021588802337646
+[dog]
+Elapsed: 0.0645761489868164
+[dog clean]
+Elapsed: 0.2919800281524658
+[gmm]
+Elapsed: 0.7795648574829102
+[gmm validate_mask]
+Elapsed: 0.00018262863159179688
+[vibe_bg]
+Elapsed: 1.1984562873840332
+[GaussianBlur]
+Elapsed: 0.014085531234741211
+[cvtColor]
+Elapsed: 0.0014452934265136719
+[extract_gradients]
+Elapsed: 0.24726200103759766
+[fd_mag validate_mask]
+Elapsed: 0.10924267768859863
+[Object detector]
+Elapsed: 0.0002574920654296875
+[fd_ang]
+Elapsed: 0.11830806732177734
+[fd_ang clean]
+Elapsed: 0.29819250106811523
+[fd_rgb]
+Elapsed: 0.4527585506439209
+[dog]
+Elapsed: 0.1427760124206543
+[dog clean]
+Elapsed: 0.3013880252838135
+[gmm]
+Elapsed: 0.7956628799438477
+[gmm validate_mask]
+Elapsed: 0.0001811981201171875
+[vibe_bg]
+Elapsed: 1.272359848022461
+[GaussianBlur]
+Elapsed: 0.049839019775390625
+[cvtColor]
+Elapsed: 0.0016052722930908203
+[extract_gradients]
+Elapsed: 0.2670149803161621
+[fd_mag validate_mask]
+Elapsed: 0.10821151733398438
+[Object detector]
+Elapsed: 0.00023412704467773438
+[fd_ang]
+Elapsed: 0.0886843204498291
+[fd_ang clean]
+Elapsed: 0.31439971923828125
+[fd_rgb]
+Elapsed: 0.517493486404419
+[dog]
+Elapsed: 0.06819319725036621
+[dog clean]
+Elapsed: 0.29474592208862305
+[gmm]
+Elapsed: 0.822589635848999
+[gmm validate_mask]
+Elapsed: 0.0001735687255859375
+[vibe_bg]
+Elapsed: 1.232483148574829
+[GaussianBlur]
+Elapsed: 0.017241477966308594
+[cvtColor]
+Elapsed: 0.0013568401336669922
+[extract_gradients]
+Elapsed: 0.3538045883178711
+[fd_mag validate_mask]
+Elapsed: 0.09964346885681152
+[Object detector]
+Elapsed: 0.0002002716064453125
+[fd_ang]
+Elapsed: 0.07731986045837402
+[fd_ang clean]
+Elapsed: 0.29383254051208496
+[fd_rgb]
+Elapsed: 0.4934117794036865
+[dog]
+Elapsed: 0.0651404857635498
+[dog clean]
+Elapsed: 0.2922024726867676
+[gmm]
+Elapsed: 0.7811639308929443
+[gmm validate_mask]
+Elapsed: 0.0001633167266845703
+[vibe_bg]
+Elapsed: 1.1998064517974854
+[GaussianBlur]
+Elapsed: 0.01875019073486328
+[cvtColor]
+Elapsed: 0.0013475418090820312
+[extract_gradients]
+Elapsed: 0.24380970001220703
+[fd_mag validate_mask]
+Elapsed: 0.10996794700622559
+[Object detector]
+Elapsed: 0.00026154518127441406
+[fd_ang]
+Elapsed: 0.11740374565124512
+[fd_ang clean]
+Elapsed: 0.2985873222351074
+[fd_rgb]
+Elapsed: 0.5149474143981934
+[dog]
+Elapsed: 0.09800076484680176
+[dog clean]
+Elapsed: 0.3015444278717041
+[gmm]
+Elapsed: 0.7963211536407471
+[gmm validate_mask]
+Elapsed: 0.00018167495727539062
+[vibe_bg]
+Elapsed: 1.2753992080688477
+[GaussianBlur]
+Elapsed: 0.016064882278442383
+[cvtColor]
+Elapsed: 0.0021293163299560547
+[extract_gradients]
+Elapsed: 0.26210951805114746
+[fd_mag validate_mask]
+Elapsed: 0.12385034561157227
+[Object detector]
+Elapsed: 0.00022482872009277344
+[fd_ang]
+Elapsed: 0.12801265716552734
+[fd_ang clean]
+Elapsed: 0.33959269523620605
+[fd_rgb]
+Elapsed: 0.5544757843017578
+[dog]
+Elapsed: 0.10475420951843262
+[dog clean]
+Elapsed: 0.3099479675292969
+[gmm]
+Elapsed: 0.8741343021392822
+[gmm validate_mask]
+Elapsed: 0.00028443336486816406
+[vibe_bg]
+Elapsed: 1.2641081809997559
+[GaussianBlur]
+Elapsed: 0.12676668167114258
+[cvtColor]
+Elapsed: 0.0006947517395019531
+[extract_gradients]
+Elapsed: 0.2306990623474121
+[fd_mag validate_mask]
+Elapsed: 0.07900810241699219
+[Object detector]
+Elapsed: 0.00022459030151367188
+[fd_ang]
+Elapsed: 0.07928633689880371
+[fd_ang clean]
+Elapsed: 0.2965381145477295
+[fd_rgb]
+Elapsed: 0.48079967498779297
+[dog]
+Elapsed: 0.07230615615844727
+[dog clean]
+Elapsed: 0.35422587394714355
+[gmm]
+Elapsed: 0.7887728214263916
+[gmm validate_mask]
+Elapsed: 0.0002720355987548828
+[vibe_bg]
+Elapsed: 1.2073547840118408
+[GaussianBlur]
+Elapsed: 0.013914346694946289
+[cvtColor]
+Elapsed: 0.0023474693298339844
+[extract_gradients]
+Elapsed: 0.2432234287261963
+[fd_mag validate_mask]
+Elapsed: 0.12869000434875488
+[Object detector]
+Elapsed: 0.0002391338348388672
+[fd_ang]
+Elapsed: 0.1665194034576416
+[fd_ang clean]
+Elapsed: 0.3208200931549072
+[fd_rgb]
+Elapsed: 0.5693545341491699
+[dog]
+Elapsed: 0.08854532241821289
+[dog clean]
+Elapsed: 0.36776232719421387
+[gmm]
+Elapsed: 0.8644120693206787
+[gmm validate_mask]
+Elapsed: 0.0002048015594482422
+[vibe_bg]
+Elapsed: 1.3283867835998535
+[GaussianBlur]
+Elapsed: 0.013867616653442383
+[cvtColor]
+Elapsed: 0.0008118152618408203
+[extract_gradients]
+Elapsed: 0.2710537910461426
+[fd_mag validate_mask]
+Elapsed: 0.16100835800170898
+[Object detector]
+Elapsed: 0.0002307891845703125
+[fd_ang]
+Elapsed: 0.14430451393127441
+[fd_ang clean]
+Elapsed: 0.2975010871887207
+[fd_rgb]
+Elapsed: 0.5166375637054443
+[dog]
+Elapsed: 0.17641901969909668
+[dog clean]
+Elapsed: 0.305544376373291
+[gmm]
+Elapsed: 0.855696439743042
+[gmm validate_mask]
+Elapsed: 0.00017905235290527344
+[vibe_bg]
+Elapsed: 1.357999324798584
+[GaussianBlur]
+Elapsed: 0.018939733505249023
+[cvtColor]
+Elapsed: 0.0007517337799072266
+[extract_gradients]
+Elapsed: 0.2393021583557129
+[fd_mag validate_mask]
+Elapsed: 0.0896914005279541
+[Object detector]
+Elapsed: 0.0002703666687011719
+[fd_ang]
+Elapsed: 0.12133550643920898
+[fd_ang clean]
+Elapsed: 0.3102140426635742
+[fd_rgb]
+Elapsed: 0.4595155715942383
+[dog]
+Elapsed: 0.16303658485412598
+[dog clean]
+Elapsed: 0.2976047992706299
+[gmm]
+Elapsed: 0.7983479499816895
+[gmm validate_mask]
+Elapsed: 0.0001876354217529297
+[vibe_bg]
+Elapsed: 1.2743806838989258
+[GaussianBlur]
+Elapsed: 0.014197826385498047
+[cvtColor]
+Elapsed: 0.040700674057006836
+[extract_gradients]
+Elapsed: 0.260650634765625
+[fd_mag validate_mask]
+Elapsed: 0.10802507400512695
+[Object detector]
+Elapsed: 0.00023937225341796875
+[fd_ang]
+Elapsed: 0.08611774444580078
+[fd_ang clean]
+Elapsed: 0.32709765434265137
+[fd_rgb]
+Elapsed: 0.5405442714691162
+[dog]
+Elapsed: 0.06790351867675781
+[dog clean]
+Elapsed: 0.2953803539276123
+[gmm]
+Elapsed: 0.8268399238586426
+[gmm validate_mask]
+Elapsed: 0.00017690658569335938
+[vibe_bg]
+Elapsed: 1.243093729019165
+[GaussianBlur]
+Elapsed: 0.015803098678588867
+[cvtColor]
+Elapsed: 0.0008249282836914062
+[extract_gradients]
+Elapsed: 0.29958462715148926
+[fd_mag validate_mask]
+Elapsed: 0.07830667495727539
+[Object detector]
+Elapsed: 0.00021791458129882812
+[fd_ang]
+Elapsed: 0.07881474494934082
+[fd_ang clean]
+Elapsed: 0.29556941986083984
+[fd_rgb]
+Elapsed: 0.5119705200195312
+[dog]
+Elapsed: 0.0650477409362793
+[dog clean]
+Elapsed: 0.2944364547729492
+[gmm]
+Elapsed: 0.7886934280395508
+[gmm validate_mask]
+Elapsed: 0.00015783309936523438
+[vibe_bg]
+Elapsed: 1.2100093364715576
+[GaussianBlur]
+Elapsed: 0.018050193786621094
+[cvtColor]
+Elapsed: 0.002357959747314453
+[extract_gradients]
+Elapsed: 0.24585819244384766
+[fd_mag validate_mask]
+Elapsed: 0.08732438087463379
+[Object detector]
+Elapsed: 0.0002796649932861328
+[fd_ang]
+Elapsed: 0.12064266204833984
+[fd_ang clean]
+Elapsed: 0.3074779510498047
+[fd_rgb]
+Elapsed: 0.5118465423583984
+[dog]
+Elapsed: 0.09619927406311035
+[dog clean]
+Elapsed: 0.30548691749572754
+[gmm]
+Elapsed: 0.8000226020812988
+[gmm validate_mask]
+Elapsed: 0.0001876354217529297
+[vibe_bg]
+Elapsed: 1.2787165641784668
+[GaussianBlur]
+Elapsed: 0.013965845108032227
+[cvtColor]
+Elapsed: 0.0024268627166748047
+[extract_gradients]
+Elapsed: 0.24448633193969727
+[fd_mag validate_mask]
+Elapsed: 0.12428784370422363
+[Object detector]
+Elapsed: 0.0002911090850830078
+[fd_ang]
+Elapsed: 0.12620830535888672
+[fd_ang clean]
+Elapsed: 0.30655503273010254
+[fd_rgb]
+Elapsed: 0.5809760093688965
+[dog]
+Elapsed: 0.07844710350036621
+[dog clean]
+Elapsed: 0.3086414337158203
+[gmm]
+Elapsed: 0.8660178184509277
+[gmm validate_mask]
+Elapsed: 0.00017690658569335938
+[vibe_bg]
+Elapsed: 1.3023548126220703
+[GaussianBlur]
+Elapsed: 0.013707637786865234
+[cvtColor]
+Elapsed: 0.00116729736328125
+[extract_gradients]
+Elapsed: 0.23206806182861328
+[fd_mag validate_mask]
+Elapsed: 0.11768341064453125
+[Object detector]
+Elapsed: 0.0002009868621826172
+[fd_ang]
+Elapsed: 0.11640715599060059
+[fd_ang clean]
+Elapsed: 0.33930420875549316
+[fd_rgb]
+Elapsed: 0.4738278388977051
+[dog]
+Elapsed: 0.06894707679748535
+[dog clean]
+Elapsed: 0.2922239303588867
+[gmm]
+Elapsed: 0.8251254558563232
+[gmm validate_mask]
+Elapsed: 0.00016736984252929688
+[vibe_bg]
+Elapsed: 1.2171835899353027
+[GaussianBlur]
+Elapsed: 0.013588190078735352
+[cvtColor]
+Elapsed: 0.0008015632629394531
+[extract_gradients]
+Elapsed: 0.24061250686645508
+[fd_mag validate_mask]
+Elapsed: 0.1097261905670166
+[Object detector]
+Elapsed: 0.00024437904357910156
+[fd_ang]
+Elapsed: 0.13770461082458496
+[fd_ang clean]
+Elapsed: 0.2986409664154053
+[fd_rgb]
+Elapsed: 0.5946097373962402
+[dog]
+Elapsed: 0.08477568626403809
+[dog clean]
+Elapsed: 0.30412817001342773
+[gmm]
+Elapsed: 0.9063661098480225
+[gmm validate_mask]
+Elapsed: 0.00021004676818847656
+[vibe_bg]
+Elapsed: 1.3172261714935303
+[GaussianBlur]
+Elapsed: 0.018343448638916016
+[cvtColor]
+Elapsed: 0.0007219314575195312
+[extract_gradients]
+Elapsed: 0.24793386459350586
+[fd_mag validate_mask]
+Elapsed: 0.10642290115356445
+[Object detector]
+Elapsed: 0.00023436546325683594
+[fd_ang]
+Elapsed: 0.16283702850341797
+[fd_ang clean]
+Elapsed: 0.33166003227233887
+[fd_rgb]
+Elapsed: 0.5710935592651367
+[dog]
+Elapsed: 0.07796144485473633
+[dog clean]
+Elapsed: 0.2938220500946045
+[gmm]
+Elapsed: 0.8171169757843018
+[gmm validate_mask]
+Elapsed: 0.00016498565673828125
+[vibe_bg]
+Elapsed: 1.3656470775604248

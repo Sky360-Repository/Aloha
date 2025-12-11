@@ -56,8 +56,8 @@ def main(camera_id: np.uint8 = 0, nbr_history_frame: np.uint8 = 2):
         # frame = cv2.resize(frame, (800, 600))
 
         # Run the detector
-        with Timer('Object detector'):
-            od.process_frame(frame)
+        #with Timer('Object detector'):
+        od.process_frame(frame)
 
         cv2.imshow("Original", frame)
         cv2.imshow("mag_mask", od.mag_mask.astype(np.uint8))
