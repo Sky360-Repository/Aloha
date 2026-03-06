@@ -1,6 +1,15 @@
 #!/usr/bin/env python3
 # coding: utf-8
 
+# \copyright    Sky360.org
+#
+# \brief        Configures the NEO-M8T timing hat for PPS output.
+#               Frequency: 1Hz
+#               pulseLen: 50ms
+#               output on GPIO pin 12 (physically)
+#
+# ************************************************************************
+
 import serial
 import time
 import struct
@@ -191,6 +200,17 @@ def build_new_tp5_payload(tp, raw_payload):
 
 
 # ------------------------
+# CHIP RESET (controlled software reboot)
+# ------------------------
+def chip_reset(ser):
+    # UBX-CFG-RST payload: navBbrMask=0, resetMode=1 (controlled software reset)
+    payload = struct.pack("<HB", 0x0000, 0x01)
+    send_ubx(ser, 0x06, 0x04, payload)
+    print("Performed controlled GNSS reset. Waiting 3 seconds...")
+    time.sleep(3)
+    
+
+# ------------------------
 # PPS GPIO test
 # ------------------------
 def test_pps_gpio():
@@ -268,9 +288,60 @@ def main():
             time.sleep(0.5)
 
         elif choice == "S":
-            save = bytearray([0xFF] + [0]*12)
-            send_ubx(ser, 0x06, 0x09, save)
-            print("Saved to BBR.\n")
+            # ------------------------
+            # Save to BBR + Flash
+            # ------------------------
+            clearMask = 0x00000000
+            saveMask  = 0x0000FFFF   # save all config blocks
+            loadMask  = 0x00000000
+            devMask   = 0x03         # BBR + Flash
+
+            payload = struct.pack("<IIIb",
+                                  clearMask,
+                                  saveMask,
+                                  loadMask,
+                                  devMask)
+
+            send_ubx(ser, 0x06, 0x09, payload)
+            print("Saved to BBR + Flash.\n")
+            time.sleep(2)  # wait 2s before reset
+
+            # ------------------------
+            # Controlled reset
+            # ------------------------
+            chip_reset(ser)
+
+            # Flush buffers and wait for module to be ready
+            ser.reset_input_buffer()
+            time.sleep(2)  # wait extra for GNSS to finish reboot
+
+            # ------------------------
+            # Poll TP5 to verify persistence
+            # ------------------------
+            send_ubx(ser, 0x06, 0x31, bytearray([TIMEPULSE_INDEX]))
+
+            raw_payload = None
+            start = time.time()
+            while time.time() - start < SER_TIMEOUT:
+                resp = read_ubx_frame(ser)
+                if not resp:
+                    continue
+                cls, msg_id, payload = resp
+                if cls == 0x06 and msg_id == 0x31 and len(payload) == 32:
+                    raw_payload = payload
+                    break
+
+            if raw_payload:
+                tp = parse_tp5(raw_payload)
+                print_tp5_block("TP5 PARAMETERS AFTER SAVE + RESET:", raw_payload)
+
+                # Check if saved values match our desired ones
+                if tp['freqPeriod'] == NEW_PULSE_PERIOD and tp['pulseLen'] == NEW_PULSE_DURATION:
+                    print("✅ TP5 persistence verified. SAVE was successful!\n")
+                else:
+                    print("⚠ TP5 persistence mismatch! Check Flash write.\n")
+            else:
+                print("❌ Could not poll TP5 after reset.\n")
 
         elif choice == "T":
             test_pps_gpio()
