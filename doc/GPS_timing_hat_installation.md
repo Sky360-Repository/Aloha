@@ -7,9 +7,10 @@ The final system operates as a **Stratum-1 time source** with **sub-microsecond 
 
 GNSS receivers provide two timing signals:
 
-| Signal | Accuracy | Purpose
-| NMEA time | ~10-50 ms | determines correct second
-| PPS pulse | ~5-10 ns | aligns clock precisely
+| Signal | Accuracy | Purpose |
+| --- | --- | --- |
+| NMEA time | ~10-50 ms | determines correct second |
+| PPS pulse | ~5-10 ns | aligns clock precisely |
 
 Chrony combines both signals to discipline the system clock.
 
@@ -84,6 +85,7 @@ Incorrect orientation may damage the board.
 Connect the fan to the GPIO power pins.
 
 | Pin | Function | Wire |
+| --- | --- | --- |
 | Pin 4 | +5V | Red |
 | Pin 6 | GND | Black |
 
@@ -103,6 +105,7 @@ cd tools/time_tools
 Use the following key strokes in the listed order:
 
 | Key | Function |
+| --- | --- |
 | P | Poll configuration |
 | A | Apply configuration |
 | S | Save configuration |
@@ -172,6 +175,7 @@ The GNSS receiver must obtain a **3D fix** before PPS output becomes valid.
 Check the **PPS LED on the timing HAT**:
 
 | LED behavior | Meaning |
+| --- | --- |
 | off | no fix |
 | blinking 1 Hz | PPS active |
 
@@ -357,6 +361,7 @@ Ensures the PPS signal is associated with the **correct NMEA second**.
 Expected accuracy of the signal:
 
 | Source | Precision |
+| --- | --- |
 | GPS NMEA | 100 ms |
 | PPS | 100 ns |
 
@@ -396,6 +401,7 @@ Expected output:
 Meaning:
 
 | Symbol | Meaning |
+| --- | --- |
 | # | reference clock |
 | * | selected time source |
 | - | source is available and useful |
@@ -464,6 +470,7 @@ The system now operates as a **GNSS disciplined Stratum-1 clock**.
 Typical accuracy:
 
 | Component | Accuracy |
+| --- | --- |
 | GNSS NMEA | ~50 ms |
 | PPS pulse | ~5 µs |
 | Linux disciplined clock | < 1 µs |
