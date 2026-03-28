@@ -16,7 +16,7 @@ Chrony combines both signals to discipline the system clock.
 
 ---
 
-# 1 Install Backup Battery
+# 1. Install backup battery
 
 Insert a **ML1220 rechargeable cell battery** into the battery holder on the **Waveshare NEO-M8T Timing HAT**.
 
@@ -43,7 +43,9 @@ With the battery:
 
 ---
 
-# 2 Modify Cooling Plate for Battery Clearance
+# 2. Modify cooling plate for battery clearance for horizontal mounting
+
+(if you use a perpendicular GPIO extender, you can mount the timing HAT vertically and skip this section)
 
 The **Orange Pi 5+,6** usually includes a **metal cooling plate / heat spreader**.
 
@@ -68,7 +70,7 @@ After this modification the timing HAT can sit **flush on the GPIO header**.
 
 ---
 
-# 3 Mount the Timing HAT
+# 3. Mount the timing HAT
 
 Mount the **Waveshare NEO-M8T Timing HAT** onto the GPIO header.
 
@@ -80,7 +82,7 @@ Incorrect orientation may damage the board.
 
 ---
 
-# 4 Connect Cooling Fan
+# 4. Connect cooling fan
 
 Connect the fan to the GPIO power pins.
 
@@ -91,7 +93,7 @@ Connect the fan to the GPIO power pins.
 
 ---
 
-# 5 Configure the GNSS Receiver
+# 5. Configure the GNSS receiver
 
 Start the configuration script:
 
@@ -116,7 +118,7 @@ This configures the **TIMEPULSE output** for **1 Hz PPS aligned to UTC** with **
 
 ---
 
-# 6 Install gpsd
+# 6. Install gpsd
 
 Install GNSS support software.
 
@@ -129,7 +131,7 @@ sudo apt install gpsd gpsd-clients
 
 ---
 
-# 7 Configure gpsd
+# 7. Configure gpsd
 
 Edit the gpsd configuration file.
 
@@ -154,7 +156,7 @@ sudo systemctl restart gpsd
 
 ---
 
-# 8 Verify GNSS Data
+# 8. Verify GNSS data
 
 Run:
 
@@ -183,11 +185,14 @@ Without a **3D fix**, PPS will not be generated.
 
 ---
 
-# 9 Enable Kernel PPS Support
+# 9. Enable kernel PPS support
 
 Linux must capture the PPS signal using the **pps_gpio kernel driver**.
 
-This requires a **device-tree overlay**.
+On RK3588 systems (e.g. Orange Pi 5+), this requires:
+
+- A **device-tree overlay (`.dtbo`)**
+- A **U-Boot script (`overlay.scr`) to apply it at boot**
 
 Create overlay directory:
 
@@ -229,19 +234,34 @@ Insert:
 Compile the overlay:
 
 ```bash
-dtc -O dtb -o /boot/overlay-user/neo-m8t-pps.dtbo -b 0 -@ /boot/overlay-user/neo-m8t-pps.dts
+sudo dtc -O dtb -o /boot/overlay-user/neo-m8t-pps.dtbo -b 0 -@ /boot/overlay-user/neo-m8t-pps.dts
 ```
 
-Enable the overlay:
+Create the overlay script:
 
 ```bash
-sudo nano /boot/armbianEnv.txt
+sudo nano /boot/overlay.scr.txt
 ```
 
-Add:
+Insert:
 
 ```
-user_overlays=neo-m8t-pps
+# Apply PPS overlay via U-Boot
+
+# Point to the active device tree
+fdt addr ${fdtcontroladdr}
+
+# Load overlay into RAM
+load mmc 0:1 0x43000000 /boot/overlay-user/neo-m8t-pps.dtbo
+
+# Apply overlay
+fdt apply 0x43000000
+```
+
+Compile the script:
+
+```bash
+sudo mkimage -A arm64 -T script -C none -n "PPS Overlay" -d /boot/overlay.scr.txt /boot/overlay.scr
 ```
 
 Reboot the system:
@@ -252,7 +272,7 @@ sudo reboot
 
 ---
 
-# 10 Verify PPS Device
+# 10. Verify PPS device
 
 After reboot verify PPS is available.
 
@@ -270,7 +290,7 @@ Test PPS capture:
 
 ```bash
 sudo apt install pps-tools
-ppstest /dev/pps0
+sudo ppstest /dev/pps0
 ```
 
 Example output:
@@ -283,7 +303,7 @@ This confirms the kernel is receiving PPS pulses.
 
 ---
 
-# 11 Install and Configure Chrony
+# 11. Install and configure chrony
 
 Install chrony:
 
@@ -383,7 +403,7 @@ Provides leap second information from the timezone database.
 
 ---
 
-# 12 Verify Time Synchronization
+# 12. Verify time synchronization
 
 Check chrony sources:
 
@@ -422,7 +442,7 @@ System time     : 0.000000600 seconds fast
 
 ---
 
-# 13 Full Validation Checklist
+# 13. Full validation checklist
 
 ### Hardware
 
@@ -463,7 +483,7 @@ Expected:
 
 ---
 
-# 14 Final Result
+# 14. Final result
 
 The system now operates as a **GNSS disciplined Stratum-1 clock**.
 
