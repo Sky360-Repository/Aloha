@@ -1,7 +1,11 @@
 # GNSS PPS Disciplined Clock Setup
 ## Waveshare NEO-M8T Timing HAT on Orange Pi 5+
 
-This document explains how to configure an **Orange Pi 5+, 6** with the **Waveshare NEO-M8T GNSS Timing HAT** to create a **PPS-disciplined system clock** using **gpsd** and **chrony**.
+This document explains how to configure an **Orange Pi 5+, 6** with the **Waveshare NEO-M8T GNSS Timing HAT** to create a **PPS-disciplined system clock** using **gpsd** and **chrony** and to propagate time with PPS accurracy to other boards.
+
+We define 2 types of boards:
+1. the board with the timing HAT - hostname: S360time
+2. the board(s) with no timing HAT - hostname: S360asc, S360ptf, ...
 
 The final system operates as a **Stratum-1 time source** with **sub-microsecond clock accuracy**.
 
@@ -16,7 +20,7 @@ Chrony combines both signals to discipline the system clock.
 
 ---
 
-# 1. Install backup battery
+# 1. Install backup battery on the Waveshare NEO-M8T timing HAT
 
 Insert a **ML1220 rechargeable cell battery** into the battery holder on the **Waveshare NEO-M8T Timing HAT**.
 
@@ -43,7 +47,7 @@ With the battery:
 
 ---
 
-# 2. Modify cooling plate for battery clearance for horizontal mounting
+# 2. Modify cooling plate for battery clearance for horizontal mounting on S360time
 
 (if you use a perpendicular GPIO extender, you can mount the timing HAT vertically and skip this section)
 
@@ -70,7 +74,7 @@ After this modification the timing HAT can sit **flush on the GPIO header**.
 
 ---
 
-# 3. Mount the timing HAT
+# 3. Mount the timing HAT on S360time
 
 Mount the **Waveshare NEO-M8T Timing HAT** onto the GPIO header.
 
@@ -82,7 +86,7 @@ Incorrect orientation may damage the board.
 
 ---
 
-# 4. Connect cooling fan
+# 4. Connect cooling fan on all boards
 
 Connect the fan to the GPIO power pins.
 
@@ -93,7 +97,7 @@ Connect the fan to the GPIO power pins.
 
 ---
 
-# 5. Configure the GNSS receiver
+# 5. Configure the GNSS receiver on S360time
 
 Start the configuration script:
 
@@ -118,7 +122,7 @@ This configures the **TIMEPULSE output** for **1 Hz PPS aligned to UTC** with **
 
 ---
 
-# 6. Install gpsd
+# 6. Install gpsd on all boards
 
 Install GNSS support software.
 
@@ -131,7 +135,7 @@ sudo apt install gpsd gpsd-clients
 
 ---
 
-# 7. Configure gpsd
+# 7. Configure gpsd on S360time
 
 Edit the gpsd configuration file.
 
@@ -139,13 +143,13 @@ Edit the gpsd configuration file.
 sudo nano /etc/default/gpsd
 ```
 
-Example configuration:
+Configuration:
 
 ```
 START_DAEMON="true"
 USBAUTO="false"
-DEVICES="/dev/ttyACM0"
-GPSD_OPTIONS="-n"
+DEVICES="/dev/ttyACM0 /dev/pps0"
+GPSD_OPTIONS="-n -G"
 ```
 
 Restart gpsd:
@@ -156,7 +160,32 @@ sudo systemctl restart gpsd
 
 ---
 
-# 8. Verify GNSS data
+# 7. Configure gpsd on all other boards
+
+Edit the gpsd configuration file.
+
+```bash
+sudo nano /etc/default/gpsd
+```
+
+Configuration:
+
+```
+START_DAEMON="true"
+USBAUTO="false"
+DEVICES=""
+GPSD_OPTIONS="-n -G"
+```
+
+Restart gpsd:
+
+```bash
+sudo systemctl restart gpsd
+```
+
+---
+
+# 8. Verify GNSS data on S360time
 
 Run:
 
@@ -185,11 +214,35 @@ Without a **3D fix**, PPS will not be generated.
 
 ---
 
-# 9. Enable kernel PPS support
+# 9. Wiring the boards for PPS signal via GPIO pins
 
-Linux must capture the PPS signal using the **pps_gpio kernel driver**.
+To transport the PPS signal from S360time to other boards like S360asc, we need to couple two physical GPIO pins from board to board.
 
-On RK3588 systems (e.g. Orange Pi 5+), this requires:
+Assume a jumper wire couple, both ends female, of 20cm length, that is to connect physical GPIO pin 12 on the S360time board with the physical GPIO pin 12 on the S360asc board.
+
+The same goes with physical GPIO pin 14.
+
+If more boards need to be connected, the prior jumper wire couple needs to be doubled, tripled, ... (like you hold a bouque of flowers in your hand)
+
+//We need to find a more practicable way for combining several jumper wire couples for connecting all to the S360time board.
+
+## Verifying the PPS signal
+
+```bash
+sudo gpiomon gpiochip3 1 0
+```
+
+(note: as soon as you do step #9 and activate the kernel PPS support, gpiomon can't access gpiochip3 1 anymore)
+
+---
+
+# 10. Enable kernel PPS support on all boards
+
+Linux must capture the PPS signal via a GPIO line and expose it as `/dev/pps0`.  
+
+On the Orange Pi 5+ (RK3588), this is done using a **Device Tree Overlay (DTO)** applied by U-Boot.
+
+This requires:
 
 - A **device-tree overlay (`.dtbo`)**
 - A **U-Boot script (`overlay.scr`) to apply it at boot**
@@ -219,13 +272,11 @@ Insert:
         target-path = "/";
         __overlay__ {
 
-            pps_gpio {
+            gps_pps: pps_gpio {
                 compatible = "pps-gpio";
                 gpios = <&gpio3 1 0>;
-                assert-falling-edge;
                 status = "okay";
             };
-
         };
     };
 };
@@ -272,7 +323,7 @@ sudo reboot
 
 ---
 
-# 10. Verify PPS device
+# 11. Verify PPS device on all boards
 
 After reboot verify PPS is available.
 
@@ -303,7 +354,7 @@ This confirms the kernel is receiving PPS pulses.
 
 ---
 
-# 11. Install and configure chrony
+# 12. Install and configure chrony on S360time
 
 Install chrony:
 
@@ -342,7 +393,46 @@ sudo systemctl restart chrony
 
 ---
 
-## Explanation of Chrony Configuration
+# 12. Install and configure chrony on all other boards
+
+Install chrony:
+
+```bash
+sudo apt install chrony
+```
+
+Edit the configuration:
+
+```bash
+sudo nano /etc/chrony/chrony.conf
+```
+
+Insert (check for double entries):
+
+```
+driftfile /var/lib/chrony/chrony.drift
+
+refclock PPS /dev/pps0 refid PPS lock GPS precision 1e-7
+server S360time iburst
+
+ntsdumpdir /var/lib/chrony
+logdir /var/log/chrony
+
+maxupdateskew 100.0
+rtcsync
+makestep 1 3
+leapsectz right/UTC
+```
+
+Restart chrony:
+
+```bash
+sudo systemctl restart chrony
+```
+
+---
+
+## Explanation of Chrony Configuration (example for S360time)
 
 ### driftfile
 Stores oscillator drift calibration so chrony learns the system clock characteristics.
@@ -403,7 +493,7 @@ Provides leap second information from the timezone database.
 
 ---
 
-# 12. Verify time synchronization
+# 13. Verify time synchronization
 
 Check chrony sources:
 
@@ -411,11 +501,18 @@ Check chrony sources:
 chronyc sources
 ```
 
-Expected output:
+Expected output on S360time:
 
 ```
 #* PPS
 #- GPS
+```
+
+Expected output on all other boards:
+
+```
+#* PPS
+^- S360time.lan
 ```
 
 Meaning:
@@ -423,6 +520,7 @@ Meaning:
 | Symbol | Meaning |
 | --- | --- |
 | # | reference clock |
+| ^ | server clock |
 | * | selected time source |
 | - | source is available and useful |
 
@@ -435,23 +533,26 @@ chronyc tracking
 Example:
 
 ```
-Reference ID    : PPS
+Reference ID    : 50505300 (PPS)
 Stratum         : 1
-System time     : 0.000000600 seconds fast
+System time     : 0.000000600 seconds fast of NTP time
 ```
 
 ---
 
-# 13. Full validation checklist
+# 14. Full validation checklist
 
 ### Hardware
 
+- Orange Pi5+ 16GB w hostname: S360time
+- optional: Orange Pi5+ 16GB w hostname: S360asc, or S360ptf, ...
 - ML1220 battery installed
 - timing HAT correctly oriented
 - GNSS antenna connected
 - PPS LED blinking
+- GPIO wires connected
 
-### GNSS
+### GNSS on S360time
 
 ```
 cgps
@@ -460,7 +561,7 @@ cgps
 - satellites visible
 - **3D fix achieved**
 
-### PPS
+### PPS on all boards
 
 ```
 ll /dev/pps0
@@ -469,7 +570,7 @@ ppstest /dev/pps0
 
 - PPS pulses detected
 
-### Chrony
+### Chrony on all boards
 
 ```
 chronyc sources
@@ -483,9 +584,9 @@ Expected:
 
 ---
 
-# 14. Final result
+# 15. Final result
 
-The system now operates as a **GNSS disciplined Stratum-1 clock**.
+The system now operates as a **GNSS disciplined Stratum-1 clock** on all connected boards.
 
 Typical accuracy:
 
