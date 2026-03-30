@@ -226,7 +226,7 @@ If more boards need to be connected, the prior jumper wire couple needs to be do
 
 //We need to find a more practicable way for combining several jumper wire couples for connecting all to the S360time board.
 
-## Verifying the PPS signal
+Verifying the PPS signal:
 
 ```bash
 sudo gpiomon gpiochip3 1 0
@@ -385,6 +385,37 @@ makestep 1 3
 leapsectz right/UTC
 ```
 
+Create the udev rule:
+
+```bash
+sudo nano /etc/udev/rules.d/99-pps.rules
+```
+
+Insert:
+
+```
+KERNEL=="pps0", OWNER="_chrony", GROUP="_chrony", MODE="0660"
+```
+
+Reload udev and apply immediately:
+
+```bash
+sudo udevadm control --reload-rules
+sudo udevadm trigger /dev/pps0
+```
+
+Verify:
+
+```bash
+ls -l /dev/pps0
+```
+
+Expected:
+
+```
+crw-rw---- 1 _chrony _chrony ...
+```
+
 Restart chrony:
 
 ```bash
@@ -422,6 +453,37 @@ maxupdateskew 100.0
 rtcsync
 makestep 1 3
 leapsectz right/UTC
+```
+
+Create the udev rule:
+
+```bash
+sudo nano /etc/udev/rules.d/99-pps.rules
+```
+
+Insert:
+
+```
+KERNEL=="pps*", OWNER="_chrony", GROUP="_chrony", MODE="0660"
+```
+
+Reload udev and apply immediately:
+
+```bash
+sudo udevadm control --reload-rules
+sudo udevadm trigger /dev/pps0
+```
+
+Verify:
+
+```bash
+ls -l /dev/pps0
+```
+
+Expected:
+
+```
+crw-rw---- 1 _chrony _chrony ...
 ```
 
 Restart chrony:
@@ -546,6 +608,7 @@ System time     : 0.000000600 seconds fast of NTP time
 
 - Orange Pi5+ 16GB w hostname: S360time
 - optional: Orange Pi5+ 16GB w hostname: S360asc, or S360ptf, ...
+- Waveshare NEO-M8T timing hat
 - ML1220 battery installed
 - timing HAT correctly oriented
 - GNSS antenna connected
