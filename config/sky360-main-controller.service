@@ -1,0 +1,32 @@
+[Unit]
+Description=Sky360 Main Controller
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+User=s360
+Group=s360
+
+WorkingDirectory=/opt/Sky360
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /opt/Sky360/bin/main_controller.py
+
+Restart=always
+RestartSec=5
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+
+# Shutdown behavior
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target
+
