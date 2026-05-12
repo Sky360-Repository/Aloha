@@ -31,7 +31,7 @@ Learn about our research and development:
 - [Object Detection Architecture](./doc/ObjectDetectionArchitecture.md)
 - [ViBe](./doc/ViBe.md)
 - [Gaussian Mixture of Models](./doc/GMM.md)
-- [Time from GPS](./doc/Time_from_GPS.md)
+- [GNSS disciplined systemwide clock](./doc/GPS_timing_hat_installation.md)
 - [Using RTL-SDR to detect aircrafts and GPS module u-blox to detect satellites](./doc/AirspaceController.md)
 - [Multicast Route Configuration](./doc/Multicast_Route_Configuration.md)
 
