@@ -44,7 +44,7 @@ Please follow this instructions to configure **ZRAM Swap**: [swapfile.md](swapfi
 5. Install SDKs
 
 QHY SDK:
-```
+
 Download the latest installer [QHY SDK](https://www.qhyccd.com/html/prepub/log_en.html#!log_en.md#PoleMaster_QT_History:~:text=Arm%5F64,%5B%20%2D%20%5D)
 extract sdk_Arm64_**.**.**.tgz
 
