@@ -8,6 +8,8 @@ Minimum setup to contribute to this project:
 * QHY183c - please contact us to get the correct [QHY SDK](https://drive.google.com/drive/u/0/folders/1H8pIfihB8eMw67oz7WuLpJ6XvD_zrS6P?ths=true)
 * UBUNTU-24.04 desktop for Orange P5 plus - please contact us to get the correct [UBUNTU-24.04 Image ISO](https://drive.google.com/file/d/1muHc1hqhuZ0o6j6jQEbMYEPHzJo2qxyl/view?usp=drive_link)
 
+As an alternative to QHY, we also support ZWO ASI676MC. please downloade the SDK from [ASI676MC SDK](https://www.zwoastro.com/software/?utm_source=copilot.com#:~:text=Update%20History-,Download,-V1.41%202026%2D01)
+
 We understand that an astrophotography camera like QHY183c is expensive, specially if you just want to contribute to software
 development. For this reason we also recommend these budget cameras: USB Fisheye Camera Module ELP_USB500W05G_BL180 or Dual Lens version ELP-USB3D1080P02-L180
 
@@ -39,18 +41,67 @@ This will cause wear on the SD or NVMe drives.
 
 Please follow this instructions to configure **ZRAM Swap**: [swapfile.md](swapfile.md)
 
-5. Install QHY SDK
+5. Install SDKs
+
+QHY SDK:
 ```
-extract sdk_Arm64_24.12.26.tgz
-sudo chmod +x *.sh
-sudo ./install.sh
+Download the latest installer [QHY SDK](https://www.qhyccd.com/html/prepub/log_en.html#!log_en.md#PoleMaster_QT_History:~:text=Arm%5F64,%5B%20%2D%20%5D)
+extract sdk_Arm64_**.**.**.tgz
+
+```
+    cd sdk_Arm64_**.**.**
+    sudo chmod +x *.sh
+    sudo ./install.sh
+```
+
 setup UDEV rules
-sudo cp 85-qhyccd.rules /etc/rules.d
+```
+    cd etc/udev/rules.d/
+    sudo cp 85-qhyccd.rules /etc/udev/rules.d/
+```
+
+Edit the file
+```
+    sudo gedit /etc/udev/rules.d/85-qhyccd.rules
+```    
+
 add the following text at the end of this file
-SUBSYSTEM==”usb”, ATTR{idVendor}==”1618”, MODE=”0666”, GROUP=”plugdev”
-sudo udevadm control –reload-rules
+```
+    SUBSYSTEM=="usb", ATTR{idVendor}=="1618", MODE="0666", GROUP="plugdev"
+```
+
+trigger
+```
+    sudo udevadm control –reload-rules
+    sudo udevadm trigger
+```
+
+Confirm the installation
+```
+   ls -al /usr/local/lib/libqhy*
+```
+
+Download and install [EZCAP_QTforArm64Ubuntu](https://www.qhyccd.com/html/prepub/log_en.html#!log_en.md#PoleMaster_QT_History:~:text=EZCAP_QTforArm64Ubuntu%20210517) to test the camera.
+
+
+ZWO SDK:
+
+Download the latest SDK [ASI SDK – Linux – arm64](https://www.zwoastro.com/software/?utm_source=copilot.com#:~:text=Update%20History-,Download,-V1.41%202026%2D01)
+
+```
+    tar -xjf ASICamera2_Linux_ARM64_v1.x.x.tar.bz2
+    cd ASI_linux_mac_SDK_V1.41/lib/armv8
+    sudo cp libASICamera2.so /usr/local/lib/
+    sudo ldconfig
+```
+set 99-asi.rules
+```
+sudo cp ASI_linux_mac_SDK_V1.41/lib/asi.rules /etc/udev/rules.d/99-asi.rules
+sudo udevadm control --reload-rules
 sudo udevadm trigger
 ```
+
+Use the demo to test the camera: ASI_linux_mac_SDK_V1..x.x/demo
 
 6. Setup a github account
 
