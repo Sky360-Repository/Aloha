@@ -9,10 +9,9 @@ import multiprocessing as mp
 import cv2
 import argparse
 
-from ecal_lib.ecal_util.proto_receiver import ProtoReceiver
-from ecal_lib.ecal_util.proto_sender import ProtoSender
-from ecal_lib.ecal_util.jpeg_compression import convert_image_to_byte_array
-from ecal_lib.ecal_util.set_process_name import *
+from ecal_lib.src.proto_receiver import ProtoReceiver
+from ecal_lib.src.proto_sender import ProtoSender
+from ecal_lib.utils.jpeg_compression import convert_image_to_byte_array
 
 CAMERA_ID = 0
 QHY_CHANNEL_NAME = "QHYCamera"
@@ -36,10 +35,16 @@ INIT_PULSE_TIMEOUT_SEC = 30
 # To record raw set JPEG_QUALITY = -1
 JPEG_QUALITY = 100
 
+def _fill_timestamp(ts_msg, ns_value: int):
+    """
+    Fill a protobuf Timestamp message from a nanosecond integer.
+    """
+    ts_msg.sec = ns_value // 1_000_000_000
+    ts_msg.nsec = ns_value % 1_000_000_000
+
 def webcam2ecal(param_queue, status_queue):
 
-    # Set process name
-    set_process_name(f"{QHY_CHANNEL_NAME} Broadcast")
+    print(f"python view_ecal_video.py --channel_name \"{QHY_CHANNEL_NAME}\" --message_name \"{MESSAGE_NAME}\" --proto_file \"{PROTO_FILE}\"")
 
     # Proto sender
     proto_snd = ProtoSender(QHY_CHANNEL_NAME, MESSAGE_NAME, PROTO_FILE)
@@ -67,20 +72,38 @@ def webcam2ecal(param_queue, status_queue):
             print(f"Camera {CAMERA_ID} not available")
             break
 
-        # Access the protobuf type definition
+        # Payload message (this is frame_data, not the wrapper)
         protobuf_message = proto_snd.get_message_type()
+
+        # Frame shape
         protobuf_message.width = frame.shape[1]
         protobuf_message.height = frame.shape[0]
+
+        # OpenCV BGR image is usually 8 bits per channel
+        # If you want "total bits per pixel", 3 * 8 = 24
+        protobuf_message.bit_per_pixel = 24
+
         if JPEG_QUALITY == -1:
             protobuf_message.raw_image = frame.tobytes()
+            protobuf_message.jpeg_data = b""
             protobuf_message.jpeg_size = 0
         else:
             byte_array = convert_image_to_byte_array(frame, JPEG_QUALITY)
             protobuf_message.jpeg_data = byte_array
             protobuf_message.jpeg_size = len(byte_array)
+            protobuf_message.raw_image = b""
 
-        protobuf_message.sensor_id = CAMERA_ID
-        protobuf_message.time_stamp = int(time.time() * 1.0e6)
+        protobuf_message.sensor_id = int(CAMERA_ID)
+
+        # Acquisition timestamps stored in payload
+        epoch_ns = time.time_ns()
+        mono_ns = time.monotonic_ns()
+
+        _fill_timestamp(protobuf_message.epoch_time, epoch_ns)
+        _fill_timestamp(protobuf_message.mono_time, mono_ns)
+
+        # Metadata
+        protobuf_message.source = "webcam2ecal"
 
         # Send the message to the topic this publisher was created for
         proto_snd.send(protobuf_message)
@@ -128,9 +151,6 @@ def webcam_controller():
     status_queue = mp.Queue()
     restart_attempts = 0
 
-    # Set process name
-    set_process_name(f"{QHY_CHANNEL_NAME} Broadcast")
-
     # Proto sender
     status_proto_snd = ProtoSender(QHY_STATUS_CHANNEL, STATUS_MESSAGE_NAME, STATUS_PROTO_FILE)
 
@@ -163,7 +183,14 @@ def webcam_controller():
                 status_proto_message.gain = status_message['gain']
                 status_proto_message.exposure = status_message['exposure']
                 status_proto_message.is_qhy_live = True
-                status_proto_message.time_stamp = int(status_message['pulse_time'] * 1.0e6)
+                status_proto_message.source = "Webcam"
+
+                # Acquisition timestamps stored in payload
+                epoch_ns = time.time_ns()
+                mono_ns = time.monotonic_ns()
+
+                _fill_timestamp(status_proto_message.epoch_time, epoch_ns)
+                _fill_timestamp(status_proto_message.mono_time, mono_ns)
 
                 # Send the message to the topic this publisher was created for
                 status_proto_snd.send(status_proto_message)

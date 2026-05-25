@@ -15,10 +15,9 @@ import subprocess
 import os
 from datetime import datetime, timezone
 
-from ecal_lib.ecal_util.proto_receiver import ProtoReceiver
-from ecal_lib.ecal_util.proto_sender import ProtoSender
-from ecal_lib.ecal_util.image_message import ImageMessage
-from ecal_lib.ecal_util.set_process_name import *
+from ecal_lib.src.proto_receiver import ProtoReceiver
+from ecal_lib.src.proto_sender import ProtoSender
+from ecal_lib.utils.image_message import ImageMessage
 
 QHY_CHANNEL_NAME = "QHYCamera"
 #MESSAGE_NAME = "web_camera_image"
@@ -79,9 +78,6 @@ def view_ecal_video():
 class CameraMonitorApp:
 
     def __init__(self, root):
-        # Initialize eCAL
-        set_process_name(f"{QHY_CHANNEL_NAME} Monitor App")
-
         # Proto sender
         self.params_proto_snd = ProtoSender(QHY_PARAMS_CHANNEL, PARAMS_MESSAGE_NAME, PARAMS_PROTO_FILE)
 
@@ -108,7 +104,6 @@ class CameraMonitorApp:
         self.msg_frame = msg_frame
 
         msg_frame.grid_columnconfigure(1, weight=1)
-
 
         # UI elements
         self.date_var = tk.StringVar(value="0000-00-00")

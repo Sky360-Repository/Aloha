@@ -8,142 +8,159 @@ import time
 import cv2
 import argparse
 
-from ecal_util.proto_sender import ProtoSender
-from ecal_util.jpeg_compression import convert_image_to_byte_array
-from ecal_util.set_process_name import *
+from ecal_lib.src.proto_sender import ProtoSender
+from ecal_lib.utils.jpeg_compression import convert_image_to_byte_array
 
 
-def webcam2ecal(camera_id, channel_name, message_name, proto_file):
+def _fill_timestamp(ts_msg, ns_value: int):
+    """
+    Fill a protobuf Timestamp message from a nanosecond integer.
+    """
+    ts_msg.sec = ns_value // 1_000_000_000
+    ts_msg.nsec = ns_value % 1_000_000_000
 
-    # jpeg compression rate in [0, 100]
-    # where 100% is the best quality
-    # To record raw set jpeg_quality = -1
+
+def webcam2ecal(camera_id, channel_name, wrapper_message_name, proto_file):
+    # JPEG compression rate in [0, 100]
+    # where 100 is best quality.
+    # To record raw only set jpeg_quality = -1
     jpeg_quality = 100
 
-    # Open the webcam
-    # Windows backends
-    # - CAP_DSHOW (DirectShow)
-    # - CAP_MSMF (Microsoft Media Foundation)
-    # - CAP_VFW (Video For Windows)
-    #
-    # Backend available on Orange is V4L2
-    # Default is V4L2 but doesn't allow to change parameters
+    # Open webcam
     cap = cv2.VideoCapture(camera_id)
 
     cv2.namedWindow(channel_name + " Broadcast", cv2.WINDOW_NORMAL)
 
-    # Resolution Problem
-    # Windows sets default parameters that are high frame rate and low resolution
-    # Setting to a high resolution and uncompressed
+    # Try to force a useful webcam setup
     cap.set(cv2.CAP_PROP_FPS, 30)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
-    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
-
-    # Set auto exposure to off (mode 1) or manual mode (mode 0.75)
-    # Note: This might not work with all cameras
-    # camera.set(cv2.CAP_PROP_AUTO_EXPOSURE, 3)
-
-    # Set the properties
-    # camera.set(cv2.CAP_PROP_BRIGHTNESS,  0)     # min: 0, max: 255, default = 0.0
-    # camera.set(cv2.CAP_PROP_CONTRAST, 32.0)     # min: 0, max: 255, default = 32.0
-    # camera.set(cv2.CAP_PROP_SATURATION, 75)     # min: 0, max: 255, default = 60.0
-    # camera.set(cv2.CAP_PROP_HUE, 0)             # min: 0, max: 180, default = 0.0
-    # camera.set(cv2.CAP_PROP_GAIN, 0.0)          # min: 0, max: 255, default = 0.0
-    # camera.set(cv2.CAP_PROP_EXPOSURE, -5)       # min: -13, max: -1, default = -5.0
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
 
     print(f"max_width: {cap.get(cv2.CAP_PROP_FRAME_WIDTH)}")
     print(f"max_height: {cap.get(cv2.CAP_PROP_FRAME_HEIGHT)}")
     print(f"fps: {cap.get(cv2.CAP_PROP_FPS)}")
 
-    # Set process name
-    set_process_name(f"{channel_name} Broadcast")
-
     # Proto sender
-    proto_snd = ProtoSender(channel_name, message_name, proto_file)
+    # IMPORTANT:
+    # wrapper_message_name must be the wrapper type, i.e. "web_camera_image"
+    # ProtoSender.get_message_type() will return the payload type, i.e. frame_data
+    proto_snd = ProtoSender(channel_name, wrapper_message_name, proto_file)
 
-    # Time in Microseconds
-    corr_time = int(time.time() * 1.0e6)
-    avg_run_time = 1
+    corr_time = time.time_ns() // 1000
+    avg_run_time = 1.0
 
-    # Infinite loop (using ecal_core.ok() will enable us to shutdown
-    # the process from another application
     while True:
-        # Capture frame-by-frame
         ret, frame = cap.read()
 
-        # Check if frame is not empty
         if not ret:
             print(f"Camera {camera_id} not available")
             break
 
-        # Access the protobuf type definition
+        # Payload message (this is frame_data, not the wrapper)
         protobuf_message = proto_snd.get_message_type()
+
+        # Frame shape
         protobuf_message.width = frame.shape[1]
         protobuf_message.height = frame.shape[0]
+
+        # OpenCV BGR image is usually 8 bits per channel
+        # If you want "total bits per pixel", 3 * 8 = 24
+        protobuf_message.bit_per_pixel = 24
+
         if jpeg_quality == -1:
-            raw_bytes = frame.tobytes()
-            protobuf_message.raw_image = raw_bytes
+            protobuf_message.raw_image = frame.tobytes()
+            protobuf_message.jpeg_data = b""
             protobuf_message.jpeg_size = 0
         else:
             byte_array = convert_image_to_byte_array(frame, jpeg_quality)
             protobuf_message.jpeg_data = byte_array
             protobuf_message.jpeg_size = len(byte_array)
+            protobuf_message.raw_image = b""
 
-        protobuf_message.sensor_id = camera_id
-        protobuf_message.time_stamp = int(time.time() * 1.0e6)
+        protobuf_message.sensor_id = int(camera_id)
 
-        # Send the message to the topic this publisher was created for
+        # Acquisition timestamps stored in payload
+        epoch_ns = time.time_ns()
+        mono_ns = time.monotonic_ns()
+
+        _fill_timestamp(protobuf_message.epoch_time, epoch_ns)
+        _fill_timestamp(protobuf_message.mono_time, mono_ns)
+
+        # Metadata
+        protobuf_message.source = "webcam2ecal"
+        protobuf_message.frame_id = channel_name
+
+        # Send payload only — ProtoSender wraps it and adds Header automatically
         proto_snd.send(protobuf_message)
 
-        # Calculate run frequency
+        # Runtime frequency overlay
         prev_time = corr_time
-        corr_time = int(time.time() * 1.0e6)
+        corr_time = time.time_ns() // 1000
         avg_run_time = 0.9 * avg_run_time + 0.1 * (corr_time - prev_time)
-        run_freq = 1.0e6 / avg_run_time
+        run_freq = 1.0e6 / avg_run_time if avg_run_time > 0 else 0.0
 
-        # Display time stamp
-        frame = cv2.putText(frame, "run_freq: " + str(run_freq), (30, 30), cv2.FONT_HERSHEY_SIMPLEX,
-                            1, (255, 0, 255), 2, cv2.LINE_AA)
-        frame = cv2.putText(frame, "Image Size: [" + str(frame.shape[1]) + ", " + str(frame.shape[0]) + "]",
-                            (30, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255),
-                            2, cv2.LINE_AA)
+        frame_overlay = cv2.putText(
+            frame.copy(),
+            f"run_freq: {run_freq:.2f} Hz",
+            (30, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (255, 0, 255),
+            2,
+            cv2.LINE_AA
+        )
 
-        # Display the image
-        cv2.imshow(channel_name + " Broadcast", frame)
+        frame_overlay = cv2.putText(
+            frame_overlay,
+            f"Image Size: [{frame.shape[1]}, {frame.shape[0]}]",
+            (30, 60),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (255, 0, 255),
+            2,
+            cv2.LINE_AA
+        )
 
-        # Esc key to stop
+        cv2.imshow(channel_name + " Broadcast", frame_overlay)
+
+        # ESC to stop
         if cv2.waitKey(1) & 0xFF == 27:
             break
 
-    # When everything done, release the capture
     cv2.destroyAllWindows()
-
-    # When everything done, release the capture
     cap.release()
 
 
 if __name__ == "__main__":
-
     ap = argparse.ArgumentParser()
     ap.add_argument("--channel_name", required=False,
-                    help="Specify the channel name: python webcam2ecal.py --channel_name camera_0")
+                    help="Specify the channel name: python -m ecal_lib.webcam2ecal --channel_name camera_0")
     ap.add_argument("--camera_id", required=False,
-                    help="Specify Camera ID: python webcam2ecal.py --camera_id 0")
+                    help="Specify Camera ID: python -m ecal_lib.webcam2ecal --camera_id 0")
     ap.add_argument("--message_name", required=False,
-                    help="Specify the message_name: python webcam2ecal.py --message_name web_camera_image")
+                    help="Specify the WRAPPER message name: python -m ecal_lib.webcam2ecal --message_name web_camera_image")
     ap.add_argument("--proto_file", required=False,
-                    help="Specify proto_file: python webcam2ecal.py --proto_file proto_files.web_camera_image_pb2")
+                    help="Specify proto_file: python -m ecal_lib.webcam2ecal --proto_file ecal_lib.proto_files.web_camera_image_pb2")
     args = vars(ap.parse_args())
 
-    # Default configurations
+    # Default config
     camera_id = 0
     channel_name = "camera_" + str(camera_id)
-    message_name = "web_camera_image"
-    proto_file = "proto_files.web_camera_image_pb2"
 
-    print("\n\nDefault usage: python webcam2ecal.py --camera_id 0 --channel_name camera_0 "
-          "--message_name web_camera_image --proto_file proto_files.web_camera_image_pb2")
+    # IMPORTANT:
+    # This must be the wrapper type, not frame_data
+    wrapper_message_name = "web_camera_image"
+
+    # Use package-style import path
+    proto_file = "ecal_lib.proto_files.web_camera_image_pb2"
+
+    print("\nDefault usage:")
+    print("python -m ecal_lib.webcam2ecal "
+          "--camera_id 0 "
+          "--channel_name camera_0 "
+          "--message_name web_camera_image "
+          "--proto_file ecal_lib.proto_files.web_camera_image_pb2")
     print("\nPress 'Esc' key to stop\n")
 
     if args["channel_name"]:
@@ -151,8 +168,8 @@ if __name__ == "__main__":
     if args["camera_id"]:
         camera_id = int(args["camera_id"])
     if args["message_name"]:
-        message_name = args["message_name"]
+        wrapper_message_name = args["message_name"]
     if args["proto_file"]:
         proto_file = args["proto_file"]
 
-    webcam2ecal(camera_id, channel_name, message_name, proto_file)
+    webcam2ecal(camera_id, channel_name, wrapper_message_name, proto_file)

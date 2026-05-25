@@ -5,9 +5,7 @@
 # ************************************************************************
 
 import socket
-from ecal_util.proto_sender import ProtoSender
-from ecal_util.set_process_name import set_process_name
-
+from src.proto_sender import ProtoSender
 
 def get_active_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -16,21 +14,17 @@ def get_active_ip():
     s.close()
     return ip
 
-
 # Get local IP
 my_ip = get_active_ip()
 
 channel_name = "test massager"
-message_name = "test_msg"
+message_name = "test_data"
 proto_file = "proto_files.test_proto_pb2"
+
 
 if __name__ == "__main__":
 
     name = input("Please enter your name:")
-
-    # Set process name
-    set_process_name(f"Sender test from {my_ip}")
-
     proto_snd = ProtoSender(channel_name, message_name, proto_file)
 
     print("Type 'q' exit")

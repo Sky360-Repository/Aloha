@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+package pb.sky;
+
+message Timestamp {
+    uint64 sec  = 1;  // Seconds
+    uint32 nsec = 2;  // Nanoseconds offset within the second
+}

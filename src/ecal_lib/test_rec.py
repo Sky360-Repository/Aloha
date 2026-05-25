@@ -6,8 +6,7 @@
 
 import socket
 import ecal.core.core as ecal_core
-from ecal_util.proto_receiver import ProtoReceiver
-from ecal_util.set_process_name import set_process_name
+from src.proto_receiver import ProtoReceiver
 
 
 def get_active_ip():
@@ -22,13 +21,10 @@ def get_active_ip():
 my_ip = get_active_ip()
 
 channel_name = "test massager"
-message_name = "test_msg"
+message_name = "test_data"
 proto_file = "proto_files.test_proto_pb2"
 
 if __name__ == "__main__":
-    # Set process name
-    set_process_name(f"Receiver test from {my_ip}")
-
     proto_rec = ProtoReceiver(channel_name, message_name, proto_file)
 
     # ecal_core.ok() for a gracefully shutdown

@@ -11,9 +11,8 @@ import argparse
 import os
 import numpy as np
 
-from ecal_lib.ecal_util.proto_receiver import ProtoReceiver
-from ecal_lib.ecal_util.proto_sender import ProtoSender
-from ecal_lib.ecal_util.set_process_name import *
+from ecal_lib.src.proto_receiver import ProtoReceiver
+from ecal_lib.src.proto_sender import ProtoSender
 from camera_controler.QHYCameraController import QHYCameraController
 
 QHY_CHANNEL_NAME = "QHYCamera"
@@ -33,12 +32,15 @@ PULSE_TIMEOUT_SEC = 6
 INIT_PULSE_TIMEOUT_SEC = 35
 
 debug = True
+def _fill_timestamp(ts_msg, ns_value: int):
+    """
+    Fill a protobuf Timestamp message from a nanosecond integer.
+    """
+    ts_msg.sec = ns_value // 1_000_000_000
+    ts_msg.nsec = ns_value % 1_000_000_000
 
 def QHYCamera2ecal(param_queue, status_queue):
     if debug: print("[QHYCamera2ecal] PID", os.getpid(), "starting QHYCameraController...")
-
-    # Set process name
-    set_process_name(f"{QHY_CHANNEL_NAME} Broadcast")
 
     # Proto sender
     proto_snd = ProtoSender(QHY_CHANNEL_NAME, MESSAGE_NAME, PROTO_FILE)
@@ -56,16 +58,16 @@ def QHYCamera2ecal(param_queue, status_queue):
     })
 
     while True:
-        
+
         # Find the index of the youngest (largest) timestamp
         timestamps = qhy_camera.ring_buffer.metadata_buffer[:, 0] # all timestamps
         latest_index = int(np.argmax(timestamps)) # index of the newest frame
         timestamp_sec = timestamps[latest_index]
-        
+
         # Capture frame-by-frame
         _ = qhy_camera.get_live_frame()
         frame = qhy_camera.ring_buffer.frame_buffer[latest_index]
-        
+
         # send status message
         status_message = { 'pulse_time': timestamp_sec, 'exposure': qhy_camera.get_exposure(), 'gain': qhy_camera.get_gain(), 'temperature': qhy_camera.get_temperature() }
         status_queue.put(status_message)
@@ -78,8 +80,15 @@ def QHYCamera2ecal(param_queue, status_queue):
             protobuf_message.height = qhy_camera.get_shape()[0]
             protobuf_message.bit_per_pixel = 16
             protobuf_message.raw_image = frame.tobytes()
-            protobuf_message.time_stamp = int(timestamp_sec * 1.0e6)
-            
+            protobuf_message.sensor_id = int(CAMERA_ID)
+
+            # Acquisition timestamps stored in payload
+            epoch_ns = time.time_ns()
+            mono_ns = time.monotonic_ns()
+
+            _fill_timestamp(protobuf_message.epoch_time, epoch_ns)
+            _fill_timestamp(protobuf_message.mono_time, mono_ns)
+
             # Send the message to the topic this publisher was created for
             proto_snd.send(protobuf_message)
 
@@ -109,9 +118,6 @@ def main_controller():
     param_queue = mp.Queue()
     status_queue = mp.Queue()
     restart_attempts = 0
-
-    # Set process name
-    set_process_name(f"{QHY_CHANNEL_NAME} Broadcast")
 
     # Proto sender
     status_proto_snd = ProtoSender(QHY_STATUS_CHANNEL, STATUS_MESSAGE_NAME, STATUS_PROTO_FILE)
@@ -145,7 +151,14 @@ def main_controller():
                 status_proto_message.gain = status_message['gain']
                 status_proto_message.exposure = status_message['exposure']
                 status_proto_message.is_qhy_live = True
-                status_proto_message.time_stamp = int(status_message['pulse_time'] * 1.0e6)
+                status_proto_message.source = "QHY"
+
+                # Acquisition timestamps stored in payload
+                epoch_ns = time.time_ns()
+                mono_ns = time.monotonic_ns()
+
+                _fill_timestamp(status_proto_message.epoch_time, epoch_ns)
+                _fill_timestamp(status_proto_message.mono_time, mono_ns)
 
                 # Send the message to the topic this publisher was created for
                 status_proto_snd.send(status_proto_message)

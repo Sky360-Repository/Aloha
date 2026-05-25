@@ -1,10 +1,24 @@
 syntax = "proto3";
 
-package test;
+package pb.sky;
+
+import "header.proto";
+import "Timestamp.proto";
 
 message test_msg
 {
-  string name      = 1;
-  string ip        = 2;
-  string msg       = 3;
+  string name             = 1;
+  string ip               = 2;
+  string msg              = 3;
+
+  // Time when the data was acquired (sensor frame time, GNSS time, etc.)
+  Timestamp epoch_time    = 4;
+  // Local monotonic time for sequencing and latency measurement
+  Timestamp mono_time     = 5;  /// Monotonic time stamp in nanoseconds
 }
+
+message test_data {
+  Header               header         =  1; /// common message header
+  test_msg             data           =  2;
+}
+

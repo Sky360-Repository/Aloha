@@ -9,9 +9,8 @@ import time
 import datetime
 import ecal.measurement.hdf5 as ecalhdf5
 import ecal.proto.helper as pb_helper
-from ecal_util.proto_receiver import ProtoReceiver
-from ecal_util.set_process_name import set_process_name
-
+from ecal_lib.src.proto_receiver import ProtoReceiver
+from ecal_lib.utils.set_process_name import set_process_name
 
 class EcalRecorder:
     def __init__(self, channel_name, message_name, proto_file, max_size_per_file=1000, ecal_meas=None):
@@ -55,20 +54,26 @@ class EcalRecorder:
         timeout_limit = 100
         count_timeout = 0
 
-        while count_timeout < timeout_limit:
-            snd_time_stamp = int(time.time() * 1.0e6)
-            received, message, rcv_time_stamp = self.proto_rec.receive(100)
+        try:
+            while count_timeout < timeout_limit:
+                snd_time_stamp = time.time_ns() // 1000
 
-            if received:
-                count_timeout = 0
-                self.meas.add_entry_to_file(
-                    message.SerializeToString(),
-                    snd_time_stamp,
-                    rcv_time_stamp,
-                    self.channel_name
-                )
-            else:
-                count_timeout += 1
+                received, wrapper, rcv_time_stamp = self.proto_rec.receive(100)
+
+                if received:
+                    count_timeout = 0
+
+                    self.meas.add_entry_to_file(
+                        wrapper.SerializeToString(),
+                        snd_time_stamp,
+                        rcv_time_stamp,
+                        self.channel_name
+                    )
+                else:
+                    count_timeout += 1
+
+        except KeyboardInterrupt:
+            print("Recording interrupted by user")
 
         if not self.meas.is_ok():
             print("Write error!")
@@ -76,3 +81,4 @@ class EcalRecorder:
 
         self.meas.close()
         print(f"{self.channel_name} recording terminated\n")
+

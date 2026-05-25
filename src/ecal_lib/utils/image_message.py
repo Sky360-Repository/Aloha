@@ -11,14 +11,22 @@ from abc import ABC, abstractmethod
 from .jpeg_compression import convert_byte_array_to_image
 
 
-# Define the interface for strategies
+# ---------- Strategy interface ----------
 class ImageStrategy(ABC):
     @abstractmethod
     def process_message(self, message):
         pass
 
+    @abstractmethod
+    def get_rgb_image(self):
+        pass
 
-# Concrete strategy for web_camera_image
+    @abstractmethod
+    def get_time_stamp(self):
+        pass
+
+
+# ---------- Strategy for new generic frame_data ----------
 class WebCameraImageStrategy(ImageStrategy):
     def __init__(self):
         self.time_stamp = 0
@@ -26,14 +34,15 @@ class WebCameraImageStrategy(ImageStrategy):
 
     def process_message(self, message):
         if message.jpeg_size == 0:
-            # Convert the raw image data back into an image
             frame = np.frombuffer(message.raw_image, dtype=np.uint8)
             self.rgb = frame.reshape((message.height, message.width, 3))
         else:
-            # jpeg decoder
             self.rgb = convert_byte_array_to_image(message.jpeg_data)
 
-        self.time_stamp = message.time_stamp
+        # Use epoch_time from new schema
+        u_sec = np.uint64(message.epoch_time.sec)
+        u_nano_sec = np.uint64(message.epoch_time.nsec)
+        self.time_stamp = np.uint64((u_sec * 1_000_000_000) + u_nano_sec)
 
     def get_rgb_image(self):
         return self.rgb
@@ -41,19 +50,26 @@ class WebCameraImageStrategy(ImageStrategy):
     def get_time_stamp(self):
         return self.time_stamp
 
-
-# Concrete strategy for QHY_ImageStrategy
-class QHY_ImageStrategy(ImageStrategy):
+# ---------- Legacy QHY strategy ----------
+class QHYImageStrategy(ImageStrategy):
     def __init__(self):
         self.time_stamp = 0
+        self.rgb = None
 
     def process_message(self, message):
-        # Convert the raw image data back into an image
         frame = np.frombuffer(message.raw_image, dtype=np.uint16)
         frame = frame.reshape((message.height, message.width, 1))
         debayered_img = cv2.cvtColor(frame, cv2.COLOR_BayerRG2RGB)
         self.rgb = debayered_img[::4, ::4]
-        self.time_stamp = message.time_stamp
+
+        if hasattr(message, "epoch_time"):
+            u_sec = np.uint64(message.epoch_time.sec)
+            u_nano_sec = np.uint64(message.epoch_time.nsec)
+            self.time_stamp = np.uint64((u_sec * 1_000_000_000) + u_nano_sec)
+        elif hasattr(message, "time_stamp"):
+            self.time_stamp = message.time_stamp
+        else:
+            self.time_stamp = 0
 
     def get_rgb_image(self):
         return self.rgb
@@ -62,7 +78,7 @@ class QHY_ImageStrategy(ImageStrategy):
         return self.time_stamp
 
 
-# Concrete strategy for CameraImage
+# ---------- Legacy CameraImage strategy ----------
 class CameraImageStrategy(ImageStrategy):
     def __init__(self):
         self.time_stamp = 0
@@ -70,19 +86,15 @@ class CameraImageStrategy(ImageStrategy):
 
     def process_message(self, message):
         if message.jpeg_size == 0:
-            # Convert the raw image data back into an image
             frame = np.frombuffer(message.raw_image, dtype=np.uint8)
             self.rgb = frame.reshape((message.height, message.width, 3))
         else:
-            # jpeg decoder
             self.rgb = convert_byte_array_to_image(message.jpeg_data)
 
-        # Convert both to uint64
+        # legacy t_Stamp field
         u_sec = np.uint64(message.t_Stamp.u_sec)
         u_nano_sec = np.uint64(message.t_Stamp.u_nano_sec)
-
-        # Convert seconds to nanoseconds and add the nanoseconds part
-        self.time_stamp = np.uint64((u_sec * 1e9) + u_nano_sec)
+        self.time_stamp = np.uint64((u_sec * 1_000_000_000) + u_nano_sec)
 
     def get_rgb_image(self):
         return self.rgb
@@ -91,20 +103,23 @@ class CameraImageStrategy(ImageStrategy):
         return self.time_stamp
 
 
-# Context class
+# ---------- Context ----------
 class ImageMessage:
     def __init__(self, message: str):
         if message == "web_camera_image":
             self._strategy = WebCameraImageStrategy()
 
-        if message == "qhy_camera_image":
-            self._strategy = QHY_ImageStrategy()
+        elif message == "qhy_camera_image":
+            self._strategy = QHYImageStrategy()
 
         elif message == "CameraImage":
             self._strategy = CameraImageStrategy()
 
         else:
-            Exception("Invalid message type. Please check that correct proto_file is used.")
+            raise ValueError(
+                f"Invalid message type '{message}'. "
+                f"Expected one of: web_camera_image, qhy_camera_image, CameraImage"
+            )
 
     def process_message(self, message):
         return self._strategy.process_message(message)
