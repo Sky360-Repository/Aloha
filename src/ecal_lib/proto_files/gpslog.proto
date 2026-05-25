@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package gpslogger;
+package pb.sky;
 
 import "header.proto";
 import "Timestamp.proto";
