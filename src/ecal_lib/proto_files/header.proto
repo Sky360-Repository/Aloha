@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package pb.sky;
+import "Timestamp.proto";
+
+message Header
+{
+  uint64 DataID        =  1;
+  uint64 DataSignature =  2;// Time stamp
+  // Time when the data was acquired (sensor frame time, GNSS time, etc.)
+  Timestamp epoch_time =  3;
+  // Local monotonic time for sequencing and latency measurement
+  Timestamp mono_time  =  4;
+}
+

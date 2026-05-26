@@ -1,13 +1,25 @@
-syntax = "proto2";
+syntax = "proto3";
 
 package pb.sky;
 
-message qhy_camera_status {
-    optional float              temperature   = 1 [default = 0];
-    optional float              gain          = 2 [default = 0];
-    optional float              exposure      = 3 [default = 0];
-    required bool               is_qhy_live   = 4 [default = false];
+import "header.proto";
+import "Timestamp.proto";
 
-    // Time stamp
-    required int64              time_stamp    = 5;  /// [0,...,2**64] [10**-6*s] Time stamp value in microseconds
+message qhy_status {
+    float              temperature   = 1;
+    float              gain          = 2;
+    float              exposure      = 3;
+    bool               is_qhy_live   = 4;
+
+    // Time when the data was acquired (sensor frame time, GNSS time, etc.)
+    Timestamp          epoch_time    = 5;
+    // Local monotonic time for sequencing and latency measurement
+    Timestamp          mono_time     = 6;
+
+    string             source        = 7;  // node name (e.g. "QHYCamera")
+}
+
+message qhy_camera_status {
+  Header               header         =  1; /// common message header
+  qhy_status           data           =  2;
 }

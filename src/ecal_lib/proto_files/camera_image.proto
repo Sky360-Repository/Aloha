@@ -1,31 +1,37 @@
-syntax = "proto2";
+syntax = "proto3";
 
 package pb.sky;
 
+import "header.proto";
+import "Timestamp.proto";
+
 message camera_image {
-    message time {
-        optional uint32 u_sec   = 1;  // Seconds (stamp_secs) since epoch (in Python the variable is
-                                      // called 'secs')
-        optional uint32 u_nano_sec  = 2;  // Nanoseconds since stamp_secs (in Python the variable is
-                                      // called 'nsecs')
-    }
 
     // COMMON FIELDS
-    optional time               time_stamp    = 1;  // Two integer time stamp
-    optional uint32             width         = 2 [default = 0]; // Width of image (mandatory for raw format)
-    optional uint32             height        = 3 [default = 0]; // Height of image (mandatory for raw format)
+    uint32             width         = 1; // Width of image (mandatory for raw format)
+    uint32             height        = 2; // Height of image (mandatory for raw format)
 
     // RAW FORMAT FIELDS
-    optional uint32             bit_per_pixel = 4 [default = 0]; // Mandatory for raw format
-    optional bytes              raw_image     = 5;               // Raw (not encoded) image frame
+    uint32             bit_per_pixel = 3; // Mandatory for raw format
+    bytes              raw_image     = 4; // Raw (not encoded) image frame
 
     // JPEG FORMAT FIELDS
-    optional bytes              jpeg_data     = 6;               // JPEG encoded image frame
-    optional uint32             jpeg_size     = 7 [default = 0]; // Size of 'jpeg_data'
+    bytes              jpeg_data     = 5; // JPEG encoded image frame
+    uint32             jpeg_size     = 6; // Size of 'jpeg_data'
 
     // h264 FORMAT FIELDS
-    optional bytes              h264_image    = 8;               // H264 encoded image frame
+    bytes              h264_image    = 7; // H264 encoded image frame
 
-    // camera identifier FIELD
-    optional uint32             sensor_id     = 9 [default = 0]; // Camera sensor id
+    // Time when the data was acquired (sensor frame time, GNSS time, etc.)
+    Timestamp                   epoch_time    = 8;
+    // Local monotonic time for sequencing and latency measurement
+    Timestamp                   mono_time     = 9;
+
+    string                      source        = 10;  // node name (e.g. "QHYCamera")
+    string                      frame_id      = 11;  // (camera / stream ID)
+}
+
+message usb_camera_data {
+  Header               header         =  1; /// common message header
+  camera_image         data           =  2;
 }

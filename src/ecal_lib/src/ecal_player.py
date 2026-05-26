@@ -12,7 +12,6 @@ from ecal.measurement.measurement import Measurement
 import ecal.core.core as ecal_core
 from ecal.core.publisher import ProtoPublisher
 
-
 class EcalPlayer:
     def __init__(self, file_path: str):
         self.file_path = file_path
@@ -21,24 +20,33 @@ class EcalPlayer:
         self.broadcaster_list = []
 
     @staticmethod
+    @staticmethod
     def _broadcaster(q, time_difference, channel, file_path):
         print(f"{channel} is broadcasting ...")
 
         measurement = Measurement(file_path)
-        channel_content = measurement[channel]
+        channel_content = list(measurement[channel])
 
-        # Extract protobuf type from first message
-        _, first_message = next(iter(channel_content))
+        if not channel_content:
+            print(f"{channel} is empty, skipping.")
+            q.put(channel)
+            return
+
+        # Extract protobuf type
+        _, first_message = channel_content[0]
         proto_type = type(first_message)
 
-        # Initialize eCAL
+        # Init eCAL
         ecal_core.initialize(sys.argv, channel)
         pub = ProtoPublisher(channel, proto_type)
 
         for time_stamp, message in channel_content:
-            curr_time = int(time.time() * 1.0e6) - time_difference
-            wait_time = max(0, (time_stamp - curr_time) / 1.0e6)
+            current_us = time.time_ns() // 1000
+            curr_time = current_us - time_difference
+
+            wait_time = max(0, (time_stamp - curr_time) / 1_000_000)
             time.sleep(wait_time)
+
             pub.send(message)
 
         ecal_core.finalize()

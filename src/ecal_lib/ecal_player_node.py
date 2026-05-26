@@ -4,8 +4,8 @@
 #
 # ************************************************************************
 
-from ecal_util.ecal_player import EcalPlayer
-from ecal_util.hdf5_finder import HDF5Finder
+from src.ecal_player import EcalPlayer
+from utils.hdf5_finder import HDF5Finder
 
 if __name__ == "__main__":
 

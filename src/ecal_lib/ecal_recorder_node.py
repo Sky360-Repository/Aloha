@@ -5,7 +5,7 @@
 # ************************************************************************
 
 import argparse
-from ecal_util.ecal_recorder import EcalRecorder
+from src.ecal_recorder import EcalRecorder
 
 if __name__ == "__main__":
 
