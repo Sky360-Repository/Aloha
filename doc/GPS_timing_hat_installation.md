@@ -7,7 +7,7 @@ We define 2 types of boards:
 1. the board with the timing HAT - hostname: S360time
 2. the board(s) with no timing HAT - hostname: S360asc, S360ptf, ...
 
-The final system operates as a **Stratum-1 time source** with **sub-microsecond clock accuracy**.
+The final system operates as a **Stratum-1 time source** with **nanosecond clock accuracy**.
 
 GNSS receivers provide two timing signals:
 
