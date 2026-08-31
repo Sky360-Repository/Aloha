@@ -1,6 +1,6 @@
 # Getting Started
 
-Our curated list of recommended hardware products can be found in [Sky360 Hardware](https://www.sky360.org/documentation#CuratedListofHardware)
+Our curated list of recommended hardware products can be found in [Sky360 Hardware](https://www.sky360.org/hardware)
 
 Minimum setup to contribute to this project:
 * Orange Pi5+ 16GB
